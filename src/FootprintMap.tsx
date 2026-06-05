@@ -7,7 +7,10 @@ import {
   distanceKm,
   durationForDistance,
   easeInOutCubic,
+  holdDurationForSpeed,
   interpolate,
+  interpolateBearing,
+  interpolateNumber,
   pointFeature,
   pointsFeatureCollection,
   routeFeature,
@@ -40,6 +43,7 @@ export default function FootprintMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const frameRef = useRef<number | null>(null);
+  const timeoutRef = useRef<number | null>(null);
   const indexRef = useRef(currentIndex);
   const playingRef = useRef(isPlaying);
   const speedRef = useRef(speed);
@@ -90,7 +94,7 @@ export default function FootprintMap({
     mapRef.current = map;
 
     return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      stopAnimationTimers();
       map.remove();
       mapRef.current = null;
     };
@@ -101,7 +105,7 @@ export default function FootprintMap({
     if (!map || mapThemeRef.current === mapTheme) return;
 
     mapThemeRef.current = mapTheme;
-    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    stopAnimationTimers();
 
     map.setStyle(buildMapStyle(mapTheme));
     map.once('idle', () => {
@@ -149,18 +153,24 @@ export default function FootprintMap({
         return;
       }
 
-      animateSegment(fromIndex, () => {
-        if (cancelled) return;
-        const nextIndex = fromIndex + 1;
-        indexRef.current = nextIndex;
-        onIndexChange(nextIndex);
+      holdAtStep(() => {
+        if (cancelled || !playingRef.current) return;
 
-        if (nextIndex >= photos.length - 1) {
-          onDone();
-          return;
-        }
+        animateSegment(fromIndex, () => {
+          if (cancelled) return;
+          const nextIndex = fromIndex + 1;
+          indexRef.current = nextIndex;
+          onIndexChange(nextIndex);
 
-        playNext();
+          if (nextIndex >= photos.length - 1) {
+            holdAtStep(() => {
+              if (!cancelled) onDone();
+            });
+            return;
+          }
+
+          playNext();
+        });
       });
     };
 
@@ -168,9 +178,30 @@ export default function FootprintMap({
 
     return () => {
       cancelled = true;
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      stopAnimationTimers();
     };
   }, [isPlaying, photos, onDone, onIndexChange]);
+
+  function holdAtStep(onComplete: () => void) {
+    timeoutRef.current = window.setTimeout(() => {
+      timeoutRef.current = null;
+      if (playingRef.current) {
+        onComplete();
+      }
+    }, holdDurationForSpeed(speedRef.current));
+  }
+
+  function stopAnimationTimers() {
+    if (frameRef.current) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }
 
   function animateSegment(fromIndex: number, onComplete: () => void) {
     const map = mapRef.current;
@@ -183,7 +214,13 @@ export default function FootprintMap({
     const distance = distanceKm(from, to);
     const duration = durationForDistance(distance, speedRef.current);
     const targetZoom = zoomForDistance(distance);
-    const targetBearing = Number.isFinite(bearing(from, to)) ? bearing(from, to) : 0;
+    const targetBearing = Number.isFinite(bearing(from, to)) ? bearing(from, to) * 0.16 : 0;
+    const targetPitch = distance > 80 ? 20 : 42;
+    const startCamera = {
+      zoom: map.getZoom(),
+      bearing: map.getBearing(),
+      pitch: map.getPitch(),
+    };
     const startTime = performance.now();
 
     const step = (time: number) => {
@@ -199,14 +236,15 @@ export default function FootprintMap({
 
       map.jumpTo({
         center: currentCoord,
-        zoom: targetZoom,
-        bearing: targetBearing * 0.16,
-        pitch: distance > 80 ? 20 : 42,
+        zoom: interpolateNumber(startCamera.zoom, targetZoom, eased),
+        bearing: interpolateBearing(startCamera.bearing, targetBearing, eased),
+        pitch: interpolateNumber(startCamera.pitch, targetPitch, eased),
       });
 
       if (rawProgress < 1) {
         frameRef.current = requestAnimationFrame(step);
       } else {
+        frameRef.current = null;
         onComplete();
       }
     };

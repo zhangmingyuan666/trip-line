@@ -1,10 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import exifr from 'exifr';
+import convertHeic from 'heic-convert';
 
-const execFileAsync = promisify(execFile);
 const rootDir = process.cwd();
 const photosDir = path.join(rootDir, 'photos');
 const outputFile = path.join(rootDir, 'src', 'photoManifest.ts');
@@ -111,7 +109,13 @@ async function ensureBrowserPreview(filePath, relativePath) {
   const shouldConvert = await isPreviewStale(filePath, previewPath);
 
   if (shouldConvert) {
-    await execFileAsync('sips', ['-s', 'format', 'jpeg', filePath, '--out', previewPath]);
+    const inputBuffer = await fs.readFile(filePath);
+    const outputBuffer = await convertHeic({
+      buffer: inputBuffer,
+      format: 'JPEG',
+      quality: 0.86,
+    });
+    await fs.writeFile(previewPath, outputBuffer);
   }
 
   return {
@@ -148,7 +152,7 @@ async function collectPhotoFiles(directory) {
 async function writeManifest(photos) {
   const items = photos
     .map((photo) => {
-      const assetPath = `../${photo.previewPath}`;
+      const assetPath = toImportPath(path.relative(path.dirname(outputFile), path.join(rootDir, photo.previewPath)));
       return `  {
     id: ${JSON.stringify(photo.id)},
     fileName: ${JSON.stringify(photo.fileName)},
@@ -204,6 +208,11 @@ function isHeic(filePath) {
 function safeBaseName(relativePath) {
   const parsed = path.parse(relativePath);
   return path.join(parsed.dir, parsed.name).split(path.sep).join('__').replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function toImportPath(relativePath) {
+  const normalized = relativePath.split(path.sep).join('/');
+  return normalized.startsWith('.') ? normalized : `./${normalized}`;
 }
 
 main().catch((error) => {

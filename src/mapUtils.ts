@@ -19,6 +19,12 @@ export function durationForDistance(distance: number, speed: PlaybackSpeed): num
   return Math.max(1400, Math.min(6500, base * multiplier));
 }
 
+export function holdDurationForSpeed(speed: PlaybackSpeed): number {
+  if (speed === 'slow') return 1800;
+  if (speed === 'fast') return 700;
+  return 1200;
+}
+
 export function zoomForDistance(distance: number): number {
   if (distance < 1) return 15;
   if (distance < 5) return 13.5;
@@ -38,6 +44,15 @@ export function interpolate(from: LngLat, to: LngLat, progress: number): LngLat 
 
 export function easeInOutCubic(value: number): number {
   return value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
+}
+
+export function interpolateNumber(from: number, to: number, progress: number): number {
+  return from + (to - from) * progress;
+}
+
+export function interpolateBearing(from: number, to: number, progress: number): number {
+  const delta = ((((to - from) % 360) + 540) % 360) - 180;
+  return from + delta * progress;
 }
 
 export function bearing(from: PhotoPoint, to: PhotoPoint): number {
