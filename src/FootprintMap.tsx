@@ -4,6 +4,7 @@ import { buildMapStyle, isDarkMapTheme } from './mapStyles';
 import type { MapTheme, PhotoPoint, PlaybackSpeed } from './types';
 import {
   bearing,
+  cameraPrepDurationForSpeed,
   distanceKm,
   durationForDistance,
   easeInOutCubic,
@@ -12,6 +13,7 @@ import {
   interpolateBearing,
   interpolateNumber,
   pointFeature,
+  postZoomHoldDurationForSpeed,
   pointsFeatureCollection,
   routeFeature,
   toLngLat,
@@ -48,6 +50,8 @@ export default function FootprintMap({
   const playingRef = useRef(isPlaying);
   const speedRef = useRef(speed);
   const mapThemeRef = useRef(mapTheme);
+  const onDoneRef = useRef(onDone);
+  const onIndexChangeRef = useRef(onIndexChange);
 
   const coordinates = useMemo(() => photos.map(toLngLat), [photos]);
 
@@ -62,6 +66,14 @@ export default function FootprintMap({
   useEffect(() => {
     speedRef.current = speed;
   }, [speed]);
+
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
+
+  useEffect(() => {
+    onIndexChangeRef.current = onIndexChange;
+  }, [onIndexChange]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -130,6 +142,7 @@ export default function FootprintMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (isPlaying) return;
 
     const run = () => syncMapData(map, photos, currentIndex, false);
     if (map.isStyleLoaded()) {
@@ -137,7 +150,7 @@ export default function FootprintMap({
     } else {
       map.once('load', run);
     }
-  }, [currentIndex, photos]);
+  }, [currentIndex, photos, isPlaying]);
 
   useEffect(() => {
     if (!isPlaying || photos.length < 2) return;
@@ -149,28 +162,25 @@ export default function FootprintMap({
       const fromIndex = indexRef.current;
 
       if (fromIndex >= photos.length - 1) {
-        onDone();
+        onDoneRef.current();
         return;
       }
 
-      holdAtStep(() => {
-        if (cancelled || !playingRef.current) return;
+      const nextIndex = fromIndex + 1;
+      indexRef.current = nextIndex;
+      onIndexChangeRef.current(nextIndex);
 
-        animateSegment(fromIndex, () => {
-          if (cancelled) return;
-          const nextIndex = fromIndex + 1;
-          indexRef.current = nextIndex;
-          onIndexChange(nextIndex);
+      animateSegment(fromIndex, () => {
+        if (cancelled) return;
 
-          if (nextIndex >= photos.length - 1) {
-            holdAtStep(() => {
-              if (!cancelled) onDone();
-            });
-            return;
-          }
+        if (nextIndex >= photos.length - 1) {
+          holdAtStep(() => {
+            if (!cancelled) onDoneRef.current();
+          });
+          return;
+        }
 
-          playNext();
-        });
+        playNext();
       });
     };
 
@@ -180,7 +190,7 @@ export default function FootprintMap({
       cancelled = true;
       stopAnimationTimers();
     };
-  }, [isPlaying, photos, onDone, onIndexChange]);
+  }, [isPlaying, photos]);
 
   function holdAtStep(onComplete: () => void) {
     timeoutRef.current = window.setTimeout(() => {
@@ -212,7 +222,8 @@ export default function FootprintMap({
     const fromCoord = toLngLat(from);
     const toCoord = toLngLat(to);
     const distance = distanceKm(from, to);
-    const duration = durationForDistance(distance, speedRef.current);
+    const moveDuration = durationForDistance(distance, speedRef.current);
+    const prepDuration = cameraPrepDurationForSpeed(speedRef.current);
     const targetZoom = zoomForDistance(distance);
     const targetBearing = Number.isFinite(bearing(from, to)) ? bearing(from, to) * 0.16 : 0;
     const targetPitch = distance > 80 ? 20 : 42;
@@ -221,35 +232,73 @@ export default function FootprintMap({
       bearing: map.getBearing(),
       pitch: map.getPitch(),
     };
-    const startTime = performance.now();
+    const prepStartTime = performance.now();
 
-    const step = (time: number) => {
+    const prepStep = (time: number) => {
       if (!playingRef.current) return;
 
-      const rawProgress = Math.min(1, (time - startTime) / duration);
+      const rawProgress = Math.min(1, (time - prepStartTime) / prepDuration);
       const eased = easeInOutCubic(rawProgress);
-      const currentCoord = interpolate(fromCoord, toCoord, eased);
-      const progressCoordinates = [...coordinates.slice(0, fromIndex + 1), currentCoord];
-
-      setSourceData(map, 'route-progress', routeFeature(progressCoordinates));
-      setSourceData(map, 'current-point', pointFeature(currentCoord));
+      setSourceData(map, 'route-progress', routeFeature(coordinates.slice(0, fromIndex + 1)));
+      setSourceData(map, 'current-point', pointFeature(fromCoord));
 
       map.jumpTo({
-        center: currentCoord,
+        center: fromCoord,
         zoom: interpolateNumber(startCamera.zoom, targetZoom, eased),
         bearing: interpolateBearing(startCamera.bearing, targetBearing, eased),
         pitch: interpolateNumber(startCamera.pitch, targetPitch, eased),
       });
 
       if (rawProgress < 1) {
-        frameRef.current = requestAnimationFrame(step);
+        frameRef.current = requestAnimationFrame(prepStep);
       } else {
         frameRef.current = null;
-        onComplete();
+        holdAfterZoom(animateMove);
       }
     };
 
-    frameRef.current = requestAnimationFrame(step);
+    const animateMove = () => {
+      const moveStartTime = performance.now();
+
+      const step = (time: number) => {
+        if (!playingRef.current) return;
+
+        const rawProgress = Math.min(1, (time - moveStartTime) / moveDuration);
+        const eased = easeInOutCubic(rawProgress);
+        const currentCoord = interpolate(fromCoord, toCoord, eased);
+        const progressCoordinates = [...coordinates.slice(0, fromIndex + 1), currentCoord];
+
+        setSourceData(map, 'route-progress', routeFeature(progressCoordinates));
+        setSourceData(map, 'current-point', pointFeature(currentCoord));
+
+        map.jumpTo({
+          center: currentCoord,
+          zoom: targetZoom,
+          bearing: targetBearing,
+          pitch: targetPitch,
+        });
+
+        if (rawProgress < 1) {
+          frameRef.current = requestAnimationFrame(step);
+        } else {
+          frameRef.current = null;
+          onComplete();
+        }
+      };
+
+      frameRef.current = requestAnimationFrame(step);
+    };
+
+    frameRef.current = requestAnimationFrame(prepStep);
+  }
+
+  function holdAfterZoom(onComplete: () => void) {
+    timeoutRef.current = window.setTimeout(() => {
+      timeoutRef.current = null;
+      if (playingRef.current) {
+        onComplete();
+      }
+    }, postZoomHoldDurationForSpeed(speedRef.current));
   }
 
   return <div ref={containerRef} className="map-canvas" aria-label="照片足迹地图" />;

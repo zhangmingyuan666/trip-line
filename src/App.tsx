@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { CalendarDays, Gauge, ImageOff, Layers, MapPin, Pause, Play, RotateCcw } from 'lucide-react';
 import FootprintMap from './FootprintMap';
 import { mapThemeLabels } from './mapStyles';
@@ -57,6 +57,10 @@ export default function App() {
     setMapTheme(nextTheme);
   }
 
+  const handlePlaybackDone = useCallback(() => {
+    setIsPlaying(false);
+  }, []);
+
   return (
     <main className="app-shell">
       <FootprintMap
@@ -66,7 +70,7 @@ export default function App() {
         speed={speed}
         mapTheme={mapTheme}
         onIndexChange={setCurrentIndex}
-        onDone={() => setIsPlaying(false)}
+        onDone={handlePlaybackDone}
       />
 
       <section className="control-panel" aria-label="照片足迹控制">

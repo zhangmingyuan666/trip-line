@@ -262,7 +262,7 @@ h1 {
   left: 24px;
   bottom: 24px;
   z-index: 5;
-  width: min(320px, calc(100vw - 48px));
+  width: min(240px, calc(100vw - 48px));
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -302,7 +302,7 @@ h1 {
 
 .empty-preview {
   display: flex;
-  min-height: 190px;
+  min-height: 150px;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -342,7 +342,7 @@ h1 {
     top: 12px;
     bottom: auto;
     left: 12px;
-    width: min(220px, calc(100vw - 84px));
+    width: min(168px, calc(100vw - 84px));
   }
 
   .photo-preview img {

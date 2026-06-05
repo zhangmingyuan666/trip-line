@@ -20,9 +20,21 @@ export function durationForDistance(distance: number, speed: PlaybackSpeed): num
 }
 
 export function holdDurationForSpeed(speed: PlaybackSpeed): number {
-  if (speed === 'slow') return 1800;
-  if (speed === 'fast') return 700;
-  return 1200;
+  if (speed === 'slow') return 1100;
+  if (speed === 'fast') return 400;
+  return 700;
+}
+
+export function postZoomHoldDurationForSpeed(speed: PlaybackSpeed): number {
+  if (speed === 'slow') return 450;
+  if (speed === 'fast') return 150;
+  return 280;
+}
+
+export function cameraPrepDurationForSpeed(speed: PlaybackSpeed): number {
+  if (speed === 'slow') return 900;
+  if (speed === 'fast') return 420;
+  return 650;
 }
 
 export function zoomForDistance(distance: number): number {
