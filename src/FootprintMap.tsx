@@ -213,6 +213,7 @@ export default function FootprintMap({
       activePopoverIndexRef.current = null;
       lastPublishedAnchorRef.current = null;
       onAnchorChangeRef.current(null);
+      revealMapDataThroughIndex(nextIndex);
       nextPopoverTimeoutRef.current = window.setTimeout(() => {
         nextPopoverTimeoutRef.current = null;
         showNextPopover();
@@ -327,6 +328,15 @@ export default function FootprintMap({
     frameRef.current = requestAnimationFrame(step);
   }
 
+  function revealMapDataThroughIndex(index: number) {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const visibleCoordinates = coordinates.slice(0, index + 1);
+    setSourceData(map, 'route-shadow', visibleCoordinates.length > 1 ? routeFeature(visibleCoordinates) : emptyLine);
+    setSourceData(map, 'photo-points', pointsFeatureCollection(photos.slice(0, index + 1)));
+  }
+
   function publishAnchorForIndex(index: number) {
     if (lastPublishedAnchorIndexRef.current !== index) {
       lastPublishedAnchorRef.current = null;
@@ -436,13 +446,15 @@ function syncMapData(map: MapLibreMap, photos: PhotoPoint[], currentIndex: numbe
   if (!map.getSource('route-shadow')) return;
 
   const coordinates = photos.map(toLngLat);
-  setSourceData(map, 'route-shadow', coordinates.length > 1 ? routeFeature(coordinates) : emptyLine);
+  const visiblePhotos = photos.slice(0, currentIndex + 1);
+  const visibleCoordinates = coordinates.slice(0, currentIndex + 1);
+  setSourceData(map, 'route-shadow', visibleCoordinates.length > 1 ? routeFeature(visibleCoordinates) : emptyLine);
   setSourceData(
     map,
     'route-progress',
-    coordinates.length > 0 ? routeFeature(coordinates.slice(0, currentIndex + 1)) : emptyLine,
+    visibleCoordinates.length > 1 ? routeFeature(visibleCoordinates) : emptyLine,
   );
-  setSourceData(map, 'photo-points', pointsFeatureCollection(photos));
+  setSourceData(map, 'photo-points', pointsFeatureCollection(visiblePhotos));
 
   if (coordinates[currentIndex]) {
     setSourceData(map, 'current-point', pointFeature(coordinates[currentIndex]));
@@ -452,15 +464,15 @@ function syncMapData(map: MapLibreMap, photos: PhotoPoint[], currentIndex: numbe
     return;
   }
 
-  if (coordinates.length === 1) {
-    map.easeTo({ center: coordinates[0], zoom: 13, duration: 700 });
+  if (visibleCoordinates.length === 1) {
+    map.easeTo({ center: visibleCoordinates[0], zoom: 13, duration: 700 });
     return;
   }
 
-  if (coordinates.length > 1) {
-    const bounds = coordinates.reduce(
+  if (visibleCoordinates.length > 1) {
+    const bounds = visibleCoordinates.reduce(
       (lngLatBounds, coordinate) => lngLatBounds.extend(coordinate),
-      new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
+      new maplibregl.LngLatBounds(visibleCoordinates[0], visibleCoordinates[0]),
     );
 
     map.fitBounds(bounds, {
