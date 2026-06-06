@@ -50,6 +50,8 @@ export default function FootprintMap({
   const timeoutRef = useRef<number | null>(null);
   const nextPopoverTimeoutRef = useRef<number | null>(null);
   const activePopoverIndexRef = useRef<number | null>(currentIndex);
+  const lastPublishedAnchorRef = useRef<{ x: number; y: number } | null>(null);
+  const lastPublishedAnchorIndexRef = useRef<number | null>(currentIndex);
   const indexRef = useRef(currentIndex);
   const playingRef = useRef(isPlaying);
   const speedRef = useRef(speed);
@@ -209,6 +211,7 @@ export default function FootprintMap({
       };
 
       activePopoverIndexRef.current = null;
+      lastPublishedAnchorRef.current = null;
       onAnchorChangeRef.current(null);
       nextPopoverTimeoutRef.current = window.setTimeout(() => {
         nextPopoverTimeoutRef.current = null;
@@ -325,6 +328,11 @@ export default function FootprintMap({
   }
 
   function publishAnchorForIndex(index: number) {
+    if (lastPublishedAnchorIndexRef.current !== index) {
+      lastPublishedAnchorRef.current = null;
+      lastPublishedAnchorIndexRef.current = index;
+    }
+
     const coordinate = coordinates[index];
     publishAnchor(coordinate);
   }
@@ -339,12 +347,15 @@ export default function FootprintMap({
   function publishAnchor(coordinate: [number, number] | undefined) {
     const map = mapRef.current;
     if (!map || !coordinate) {
+      lastPublishedAnchorRef.current = null;
       onAnchorChangeRef.current(null);
       return;
     }
 
     const point = map.project(coordinate);
-    onAnchorChangeRef.current({ x: point.x, y: point.y });
+    const stableAnchor = stabilizeProjectedAnchor({ x: point.x, y: point.y }, map, lastPublishedAnchorRef.current);
+    lastPublishedAnchorRef.current = stableAnchor;
+    onAnchorChangeRef.current(stableAnchor);
   }
 
   return <div ref={containerRef} className="map-canvas" aria-label="照片足迹地图" />;
@@ -352,6 +363,73 @@ export default function FootprintMap({
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function stabilizeProjectedAnchor(
+  point: { x: number; y: number },
+  map: MapLibreMap,
+  previousAnchor: { x: number; y: number } | null,
+): { x: number; y: number } {
+  const canvas = map.getCanvas();
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (!width || !height) return point;
+
+  const padding = Math.min(32, Math.max(18, Math.min(width, height) * 0.04));
+  const targetAnchor = isPointInsideViewport(point, width, height, padding)
+    ? point
+    : projectPointToViewportEdge(point, width, height, padding);
+
+  if (!previousAnchor) return targetAnchor;
+
+  const distance = Math.hypot(targetAnchor.x - previousAnchor.x, targetAnchor.y - previousAnchor.y);
+  if (distance < 1.4) return previousAnchor;
+
+  const isTargetVisible = isPointInsideViewport(point, width, height, padding * 1.35);
+  if (isTargetVisible) return targetAnchor;
+
+  return {
+    x: interpolateNumber(previousAnchor.x, targetAnchor.x, 0.18),
+    y: interpolateNumber(previousAnchor.y, targetAnchor.y, 0.18),
+  };
+}
+
+function isPointInsideViewport(point: { x: number; y: number }, width: number, height: number, padding: number): boolean {
+  return point.x >= padding && point.x <= width - padding && point.y >= padding && point.y <= height - padding;
+}
+
+function projectPointToViewportEdge(
+  point: { x: number; y: number },
+  width: number,
+  height: number,
+  padding: number,
+): { x: number; y: number } {
+  const minX = padding;
+  const maxX = Math.max(minX, width - padding);
+  const minY = padding;
+  const maxY = Math.max(minY, height - padding);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const deltaX = point.x - centerX;
+  const deltaY = point.y - centerY;
+  let scale = Number.POSITIVE_INFINITY;
+
+  if (deltaX > 0) scale = Math.min(scale, (maxX - centerX) / deltaX);
+  if (deltaX < 0) scale = Math.min(scale, (minX - centerX) / deltaX);
+  if (deltaY > 0) scale = Math.min(scale, (maxY - centerY) / deltaY);
+  if (deltaY < 0) scale = Math.min(scale, (minY - centerY) / deltaY);
+
+  if (!Number.isFinite(scale) || scale < 0) {
+    return {
+      x: Math.min(maxX, Math.max(minX, point.x)),
+      y: Math.min(maxY, Math.max(minY, point.y)),
+    };
+  }
+
+  return {
+    x: Math.min(maxX, Math.max(minX, centerX + deltaX * scale)),
+    y: Math.min(maxY, Math.max(minY, centerY + deltaY * scale)),
+  };
 }
 
 function syncMapData(map: MapLibreMap, photos: PhotoPoint[], currentIndex: number, shouldFitBounds: boolean) {

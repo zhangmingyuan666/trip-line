@@ -213,6 +213,7 @@ export default function App() {
 
 function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): (CSSProperties & { '--popover-placement': PhotoPopoverPlacement }) | undefined {
   if (!anchor || typeof window === 'undefined') return undefined;
+  if (!Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return undefined;
 
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
@@ -223,14 +224,19 @@ function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): (CSSProperties & { '
   const height = width * (16 / 9) + (isCompact ? 54 : 58);
   const maxLeft = Math.max(margin, viewportWidth - width - margin);
   const maxTop = Math.max(margin, viewportHeight - height - margin);
-  const placement: PhotoPopoverPlacement = anchor.x + gap + width > viewportWidth - margin ? 'left' : 'right';
-  let left = anchor.x + gap;
+  const boundedAnchor = {
+    x: clamp(anchor.x, margin, viewportWidth - margin),
+    y: clamp(anchor.y, margin, viewportHeight - margin),
+  };
+  const placement: PhotoPopoverPlacement =
+    boundedAnchor.x + gap + width > viewportWidth - margin ? 'left' : 'right';
+  let left = boundedAnchor.x + gap;
 
   if (placement === 'left') {
-    left = anchor.x - width - gap;
+    left = boundedAnchor.x - width - gap;
   }
 
-  const top = clamp(anchor.y - height / 2, margin, maxTop);
+  const top = clamp(boundedAnchor.y - height / 2, margin, maxTop);
 
   return {
     bottom: 'auto',
