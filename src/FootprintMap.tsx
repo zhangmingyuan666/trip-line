@@ -3,19 +3,19 @@ import maplibregl, { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import { buildMapStyle, isDarkMapTheme } from './mapStyles';
 import type { MapTheme, PhotoPoint, PlaybackSpeed } from './types';
 import {
+  appleEaseInOut,
   bearing,
-  cameraPrepDurationForSpeed,
+  dampedBearing,
   distanceKm,
   durationForDistance,
-  easeInOutCubic,
   holdDurationForSpeed,
   interpolate,
   interpolateBearing,
   interpolateNumber,
   pointFeature,
-  postZoomHoldDurationForSpeed,
   pointsFeatureCollection,
   routeFeature,
+  segmentProgress,
   toLngLat,
   zoomForDistance,
 } from './mapUtils';
@@ -173,14 +173,16 @@ export default function FootprintMap({
       animateSegment(fromIndex, () => {
         if (cancelled) return;
 
-        if (nextIndex >= photos.length - 1) {
-          holdAtStep(() => {
-            if (!cancelled) onDoneRef.current();
-          });
-          return;
-        }
+        holdAtStep(() => {
+          if (cancelled) return;
 
-        playNext();
+          if (nextIndex >= photos.length - 1) {
+            onDoneRef.current();
+            return;
+          }
+
+          playNext();
+        });
       });
     };
 
@@ -222,86 +224,58 @@ export default function FootprintMap({
     const fromCoord = toLngLat(from);
     const toCoord = toLngLat(to);
     const distance = distanceKm(from, to);
-    const moveDuration = durationForDistance(distance, speedRef.current);
-    const prepDuration = cameraPrepDurationForSpeed(speedRef.current);
+    const duration = durationForDistance(distance, speedRef.current);
     const targetZoom = zoomForDistance(distance);
-    const targetBearing = Number.isFinite(bearing(from, to)) ? bearing(from, to) * 0.16 : 0;
-    const targetPitch = distance > 80 ? 20 : 42;
+    const reducedMotion = prefersReducedMotion();
+    const startBearing = map.getBearing();
+    const rawBearing = bearing(from, to);
+    const targetBearing =
+      reducedMotion || !Number.isFinite(rawBearing) ? startBearing : dampedBearing(startBearing, rawBearing, 0.18, 24);
+    const targetPitch = reducedMotion ? 0 : distance > 80 ? 28 : 34;
+    const cameraLeadEnd = distance > 80 ? 0.82 : 0.76;
+    const movementStart = distance > 80 ? 0.08 : 0.04;
     const startCamera = {
       zoom: map.getZoom(),
-      bearing: map.getBearing(),
+      bearing: startBearing,
       pitch: map.getPitch(),
     };
-    const prepStartTime = performance.now();
+    const startTime = performance.now();
 
-    const prepStep = (time: number) => {
+    const step = (time: number) => {
       if (!playingRef.current) return;
 
-      const rawProgress = Math.min(1, (time - prepStartTime) / prepDuration);
-      const eased = easeInOutCubic(rawProgress);
-      setSourceData(map, 'route-progress', routeFeature(coordinates.slice(0, fromIndex + 1)));
-      setSourceData(map, 'current-point', pointFeature(fromCoord));
+      const rawProgress = Math.min(1, (time - startTime) / duration);
+      const cameraProgress = appleEaseInOut(segmentProgress(rawProgress, 0, cameraLeadEnd));
+      const movementProgress = appleEaseInOut(segmentProgress(rawProgress, movementStart, 1));
+      const currentCoord = interpolate(fromCoord, toCoord, movementProgress);
+      const progressCoordinates = [...coordinates.slice(0, fromIndex + 1), currentCoord];
+
+      setSourceData(map, 'route-progress', routeFeature(progressCoordinates));
+      setSourceData(map, 'current-point', pointFeature(currentCoord));
 
       map.jumpTo({
-        center: fromCoord,
-        zoom: interpolateNumber(startCamera.zoom, targetZoom, eased),
-        bearing: interpolateBearing(startCamera.bearing, targetBearing, eased),
-        pitch: interpolateNumber(startCamera.pitch, targetPitch, eased),
+        center: currentCoord,
+        zoom: interpolateNumber(startCamera.zoom, targetZoom, cameraProgress),
+        bearing: interpolateBearing(startCamera.bearing, targetBearing, cameraProgress),
+        pitch: interpolateNumber(startCamera.pitch, targetPitch, cameraProgress),
       });
 
       if (rawProgress < 1) {
-        frameRef.current = requestAnimationFrame(prepStep);
+        frameRef.current = requestAnimationFrame(step);
       } else {
         frameRef.current = null;
-        holdAfterZoom(animateMove);
-      }
-    };
-
-    const animateMove = () => {
-      const moveStartTime = performance.now();
-
-      const step = (time: number) => {
-        if (!playingRef.current) return;
-
-        const rawProgress = Math.min(1, (time - moveStartTime) / moveDuration);
-        const eased = easeInOutCubic(rawProgress);
-        const currentCoord = interpolate(fromCoord, toCoord, eased);
-        const progressCoordinates = [...coordinates.slice(0, fromIndex + 1), currentCoord];
-
-        setSourceData(map, 'route-progress', routeFeature(progressCoordinates));
-        setSourceData(map, 'current-point', pointFeature(currentCoord));
-
-        map.jumpTo({
-          center: currentCoord,
-          zoom: targetZoom,
-          bearing: targetBearing,
-          pitch: targetPitch,
-        });
-
-        if (rawProgress < 1) {
-          frameRef.current = requestAnimationFrame(step);
-        } else {
-          frameRef.current = null;
-          onComplete();
-        }
-      };
-
-      frameRef.current = requestAnimationFrame(step);
-    };
-
-    frameRef.current = requestAnimationFrame(prepStep);
-  }
-
-  function holdAfterZoom(onComplete: () => void) {
-    timeoutRef.current = window.setTimeout(() => {
-      timeoutRef.current = null;
-      if (playingRef.current) {
         onComplete();
       }
-    }, postZoomHoldDurationForSpeed(speedRef.current));
+    };
+
+    frameRef.current = requestAnimationFrame(step);
   }
 
   return <div ref={containerRef} className="map-canvas" aria-label="照片足迹地图" />;
+}
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function syncMapData(map: MapLibreMap, photos: PhotoPoint[], currentIndex: number, shouldFitBounds: boolean) {

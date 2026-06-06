@@ -15,8 +15,8 @@ export function distanceKm(from: PhotoPoint, to: PhotoPoint): number {
 
 export function durationForDistance(distance: number, speed: PlaybackSpeed): number {
   const multiplier = speed === 'slow' ? 1.45 : speed === 'fast' ? 0.65 : 1;
-  const base = 1400 + Math.min(distance, 900) * 8;
-  return Math.max(1400, Math.min(6500, base * multiplier));
+  const base = 1200 + Math.sqrt(Math.min(distance, 1800)) * 140;
+  return Math.max(1200, Math.min(6200, base * multiplier));
 }
 
 export function holdDurationForSpeed(speed: PlaybackSpeed): number {
@@ -25,26 +25,31 @@ export function holdDurationForSpeed(speed: PlaybackSpeed): number {
   return 700;
 }
 
-export function postZoomHoldDurationForSpeed(speed: PlaybackSpeed): number {
-  if (speed === 'slow') return 450;
-  if (speed === 'fast') return 150;
-  return 280;
-}
-
-export function cameraPrepDurationForSpeed(speed: PlaybackSpeed): number {
-  if (speed === 'slow') return 900;
-  if (speed === 'fast') return 420;
-  return 650;
-}
-
 export function zoomForDistance(distance: number): number {
-  if (distance < 1) return 15;
-  if (distance < 5) return 13.5;
-  if (distance < 20) return 11.5;
-  if (distance < 80) return 9.5;
-  if (distance < 300) return 7;
-  if (distance < 1000) return 5;
-  return 3.4;
+  const stops: Array<[number, number]> = [
+    [0.1, 15],
+    [2, 14],
+    [8, 12.7],
+    [30, 10.9],
+    [120, 8.8],
+    [420, 6.5],
+    [1200, 4.6],
+    [3000, 3.4],
+  ];
+
+  const safeDistance = Math.max(distance, stops[0][0]);
+  for (let index = 0; index < stops.length - 1; index += 1) {
+    const [startDistance, startZoom] = stops[index];
+    const [endDistance, endZoom] = stops[index + 1];
+    if (safeDistance <= endDistance) {
+      const progress =
+        (Math.log(safeDistance) - Math.log(startDistance)) /
+        (Math.log(endDistance) - Math.log(startDistance));
+      return interpolateNumber(startZoom, endZoom, appleEaseInOut(clamp01(progress)));
+    }
+  }
+
+  return stops[stops.length - 1][1];
 }
 
 export function interpolate(from: LngLat, to: LngLat, progress: number): LngLat {
@@ -58,6 +63,23 @@ export function easeInOutCubic(value: number): number {
   return value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
 }
 
+export function appleEaseInOut(value: number): number {
+  return cubicBezier(0.42, 0, 0.58, 1, clamp01(value));
+}
+
+export function appleEaseOut(value: number): number {
+  return cubicBezier(0.2, 0.8, 0.2, 1, clamp01(value));
+}
+
+export function segmentProgress(value: number, start: number, end: number): number {
+  if (end <= start) return value >= end ? 1 : 0;
+  return clamp01((value - start) / (end - start));
+}
+
+export function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
 export function interpolateNumber(from: number, to: number, progress: number): number {
   return from + (to - from) * progress;
 }
@@ -65,6 +87,37 @@ export function interpolateNumber(from: number, to: number, progress: number): n
 export function interpolateBearing(from: number, to: number, progress: number): number {
   const delta = ((((to - from) % 360) + 540) % 360) - 180;
   return from + delta * progress;
+}
+
+export function dampedBearing(from: number, to: number, strength = 0.28, maxDelta = 38): number {
+  const delta = ((((to - from) % 360) + 540) % 360) - 180;
+  const limitedDelta = Math.max(-maxDelta, Math.min(maxDelta, delta * strength));
+  return from + limitedDelta;
+}
+
+function cubicBezier(x1: number, y1: number, x2: number, y2: number, x: number): number {
+  const epsilon = 0.00001;
+  let lowerBound = 0;
+  let upperBound = 1;
+  let t = x;
+
+  for (let i = 0; i < 12; i += 1) {
+    const estimate = bezierCoordinate(t, x1, x2);
+    if (Math.abs(estimate - x) < epsilon) break;
+    if (estimate > x) {
+      upperBound = t;
+    } else {
+      lowerBound = t;
+    }
+    t = (upperBound + lowerBound) / 2;
+  }
+
+  return bezierCoordinate(t, y1, y2);
+}
+
+function bezierCoordinate(t: number, point1: number, point2: number): number {
+  const inverse = 1 - t;
+  return 3 * inverse * inverse * t * point1 + 3 * inverse * t * t * point2 + t * t * t;
 }
 
 export function bearing(from: PhotoPoint, to: PhotoPoint): number {
