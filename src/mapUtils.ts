@@ -27,6 +27,9 @@ export function holdDurationForSpeed(speed: PlaybackSpeed): number {
 
 export function zoomForDistance(distance: number): number {
   const stops: Array<[number, number]> = [
+    [0.005, 16.5],
+    [0.02, 16.1],
+    [0.08, 15.3],
     [0.1, 15],
     [2, 14],
     [8, 12.7],
