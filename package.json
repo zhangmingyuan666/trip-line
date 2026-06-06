@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "generate:photos": "node scripts/generate-photo-manifest.mjs",
+    "geocode:photos": "node scripts/reverse-geocode-photos.mjs",
     "dev": "npm run generate:photos && vite",
     "build": "npm run generate:photos && tsc --noEmit && vite build",
     "preview": "vite preview"

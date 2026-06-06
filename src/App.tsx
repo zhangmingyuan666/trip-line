@@ -20,6 +20,8 @@ const initialPhotos: PhotoPoint[] = photoManifest.map((photo) => ({
   imageUrl: photo.rawUrl,
   rawUrl: photo.rawUrl,
   fileType: photo.fileType,
+  sourceFileType: photo.sourceFileType,
+  metadata: photo.metadata,
 }));
 
 type PhotoAnchor = {
@@ -36,8 +38,10 @@ export default function App() {
   const [speed, setSpeed] = useState<PlaybackSpeed>('normal');
   const [mapTheme, setMapTheme] = useState<MapTheme>('clean');
   const [photoAnchor, setPhotoAnchor] = useState<PhotoAnchor | null>(null);
+  const [debugPreviewIndex, setDebugPreviewIndex] = useState<number | null>(null);
 
   const currentPhoto = photos[currentIndex];
+  const debugPreviewPhoto = debugPreviewIndex === null ? null : photos[debugPreviewIndex];
   const hasRoute = photos.length > 1;
 
   const dateRange = useMemo(() => {
@@ -180,6 +184,42 @@ export default function App() {
         <p className="progress-text">
           {photos.length ? `${currentIndex + 1} / ${photos.length}` : '0 / 0'}
         </p>
+
+        {!!photos.length && (
+          <section className="debug-photo-order" aria-label="图片渲染顺序">
+            <div className="debug-photo-order-header">
+              <span>渲染顺序</span>
+              <span>{photos.length} 张</span>
+            </div>
+            <ol className="debug-photo-list">
+              {photos.map((photo, index) => (
+                <li className="debug-photo-item" key={photo.id}>
+                  <button
+                    className={index === currentIndex ? 'debug-photo-button is-active' : 'debug-photo-button'}
+                    type="button"
+                    title={`${index + 1}. ${photo.fileName}`}
+                    aria-label={`第 ${index + 1} 张，${photo.fileName}`}
+                    onBlur={() => setDebugPreviewIndex(null)}
+                    onFocus={() => setDebugPreviewIndex(index)}
+                    onMouseEnter={() => setDebugPreviewIndex(index)}
+                    onMouseLeave={() => setDebugPreviewIndex(null)}
+                  >
+                    <span className="debug-photo-index">{index + 1}</span>
+                    <span className="debug-photo-name">{photo.fileName}</span>
+                    <span className="debug-photo-date">{formatDate(photo.takenAt)}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+            {debugPreviewPhoto && (
+              <aside className="debug-photo-preview" aria-hidden="true">
+                <img src={debugPreviewPhoto.imageUrl} alt="" />
+                <strong>{debugPreviewPhoto.fileName}</strong>
+                <small>{formatDateTime(debugPreviewPhoto.takenAt)}</small>
+              </aside>
+            )}
+          </section>
+        )}
       </section>
 
       {shouldShowPhotoPopover && (
