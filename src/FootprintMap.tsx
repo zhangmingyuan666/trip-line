@@ -26,6 +26,7 @@ type FootprintMapProps = {
   isPlaying: boolean;
   speed: PlaybackSpeed;
   mapTheme: MapTheme;
+  onAnchorChange: (anchor: { x: number; y: number } | null) => void;
   onIndexChange: (index: number) => void;
   onDone: () => void;
 };
@@ -39,6 +40,7 @@ export default function FootprintMap({
   isPlaying,
   speed,
   mapTheme,
+  onAnchorChange,
   onIndexChange,
   onDone,
 }: FootprintMapProps) {
@@ -46,10 +48,13 @@ export default function FootprintMap({
   const mapRef = useRef<MapLibreMap | null>(null);
   const frameRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
+  const nextPopoverTimeoutRef = useRef<number | null>(null);
+  const activePopoverIndexRef = useRef<number | null>(currentIndex);
   const indexRef = useRef(currentIndex);
   const playingRef = useRef(isPlaying);
   const speedRef = useRef(speed);
   const mapThemeRef = useRef(mapTheme);
+  const onAnchorChangeRef = useRef(onAnchorChange);
   const onDoneRef = useRef(onDone);
   const onIndexChangeRef = useRef(onIndexChange);
 
@@ -66,6 +71,10 @@ export default function FootprintMap({
   useEffect(() => {
     speedRef.current = speed;
   }, [speed]);
+
+  useEffect(() => {
+    onAnchorChangeRef.current = onAnchorChange;
+  }, [onAnchorChange]);
 
   useEffect(() => {
     onDoneRef.current = onDone;
@@ -101,6 +110,9 @@ export default function FootprintMap({
       addFootprintSources(map);
       addFootprintLayers(map, mapTheme);
       syncMapData(map, photos, currentIndex, true);
+      activePopoverIndexRef.current = currentIndex;
+      publishAnchorForIndex(currentIndex);
+      map.once('moveend', () => publishAnchorForIndex(currentIndex));
     });
 
     mapRef.current = map;
@@ -124,6 +136,9 @@ export default function FootprintMap({
       addFootprintSources(map);
       addFootprintLayers(map, mapTheme);
       syncMapData(map, photos, currentIndex, true);
+      activePopoverIndexRef.current = currentIndex;
+      publishAnchorForIndex(currentIndex);
+      map.once('moveend', () => publishAnchorForIndex(currentIndex));
     });
   }, [mapTheme, photos, currentIndex]);
 
@@ -134,8 +149,16 @@ export default function FootprintMap({
     const run = () => syncMapData(map, photos, currentIndex, true);
     if (map.isStyleLoaded()) {
       run();
+      activePopoverIndexRef.current = currentIndex;
+      publishAnchorForIndex(currentIndex);
+      map.once('moveend', () => publishAnchorForIndex(currentIndex));
     } else {
-      map.once('load', run);
+      map.once('load', () => {
+        run();
+        activePopoverIndexRef.current = currentIndex;
+        publishAnchorForIndex(currentIndex);
+        map.once('moveend', () => publishAnchorForIndex(currentIndex));
+      });
     }
   }, [photos, coordinates]);
 
@@ -147,8 +170,14 @@ export default function FootprintMap({
     const run = () => syncMapData(map, photos, currentIndex, false);
     if (map.isStyleLoaded()) {
       run();
+      activePopoverIndexRef.current = currentIndex;
+      publishAnchorForIndex(currentIndex);
     } else {
-      map.once('load', run);
+      map.once('load', () => {
+        run();
+        activePopoverIndexRef.current = currentIndex;
+        publishAnchorForIndex(currentIndex);
+      });
     }
   }, [currentIndex, photos, isPlaying]);
 
@@ -167,11 +196,29 @@ export default function FootprintMap({
       }
 
       const nextIndex = fromIndex + 1;
-      indexRef.current = nextIndex;
-      onIndexChangeRef.current(nextIndex);
+      let didShowNextPopover = false;
+
+      const showNextPopover = () => {
+        if (didShowNextPopover || cancelled || !playingRef.current) return;
+
+        didShowNextPopover = true;
+        indexRef.current = nextIndex;
+        activePopoverIndexRef.current = nextIndex;
+        onIndexChangeRef.current(nextIndex);
+        publishAnchorForIndex(nextIndex);
+      };
+
+      activePopoverIndexRef.current = null;
+      onAnchorChangeRef.current(null);
+      nextPopoverTimeoutRef.current = window.setTimeout(() => {
+        nextPopoverTimeoutRef.current = null;
+        showNextPopover();
+      }, 100);
 
       animateSegment(fromIndex, () => {
         if (cancelled) return;
+
+        showNextPopover();
 
         holdAtStep(() => {
           if (cancelled) return;
@@ -212,6 +259,11 @@ export default function FootprintMap({
     if (timeoutRef.current) {
       window.clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
+    }
+
+    if (nextPopoverTimeoutRef.current) {
+      window.clearTimeout(nextPopoverTimeoutRef.current);
+      nextPopoverTimeoutRef.current = null;
     }
   }
 
@@ -259,6 +311,7 @@ export default function FootprintMap({
         bearing: interpolateBearing(startCamera.bearing, targetBearing, cameraProgress),
         pitch: interpolateNumber(startCamera.pitch, targetPitch, cameraProgress),
       });
+      publishActivePopoverAnchor();
 
       if (rawProgress < 1) {
         frameRef.current = requestAnimationFrame(step);
@@ -269,6 +322,29 @@ export default function FootprintMap({
     };
 
     frameRef.current = requestAnimationFrame(step);
+  }
+
+  function publishAnchorForIndex(index: number) {
+    const coordinate = coordinates[index];
+    publishAnchor(coordinate);
+  }
+
+  function publishActivePopoverAnchor() {
+    const activeIndex = activePopoverIndexRef.current;
+    if (activeIndex === null) return;
+
+    publishAnchorForIndex(activeIndex);
+  }
+
+  function publishAnchor(coordinate: [number, number] | undefined) {
+    const map = mapRef.current;
+    if (!map || !coordinate) {
+      onAnchorChangeRef.current(null);
+      return;
+    }
+
+    const point = map.project(coordinate);
+    onAnchorChangeRef.current({ x: point.x, y: point.y });
   }
 
   return <div ref={containerRef} className="map-canvas" aria-label="照片足迹地图" />;
