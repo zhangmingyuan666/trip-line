@@ -33,8 +33,8 @@ lat.toFixed(6),lng.toFixed(6)
 src/generated/location-cache.json
 ```
 
-- Generated photo manifests may read this cache and merge a normalized, frontend-safe subset into `metadata.derived.location` and `metadata.derived.locationProviders`.
-- Do not embed raw provider responses into the frontend manifest. Keep raw responses only in the ignored cache for debugging.
+- Generated photo manifests must not read this cache or merge reverse-geocoded addresses into frontend data.
+- Do not embed raw provider responses or normalized provider responses into the frontend manifest. Keep reverse-geocoding results only in the ignored cache for local debugging.
 
 ## Secrets
 
@@ -52,7 +52,7 @@ config/
 
 - Supported providers are `amap`, `geoapify`, and `nominatim`.
 - Prefer `amap` for China mainland, Hong Kong, and Macau POI quality.
-- Normalize provider responses into this common shape before exposing them to application code:
+- Normalize provider responses into this common shape before writing the local cache:
 
 ```ts
 type PhotoResolvedLocation = {
@@ -72,22 +72,35 @@ type PhotoResolvedLocation = {
 
 - Provider fields can have inconsistent types, especially in Hong Kong/Macau results. Normalize empty arrays and empty strings to `null` before writing frontend-facing data.
 
-## Photo Metadata
+## Photo Metadata And Manifests
 
-- Preserve full serializable EXIF metadata under `metadata.exif` when generating `src/photoManifest.ts`.
-- Keep derived fields stable and easy to consume:
+- Generated photo manifests must be written to ignored local generated data:
 
-```ts
-metadata.derived.takenAt
-metadata.derived.latitude
-metadata.derived.longitude
-metadata.derived.location
+```text
+src/generated/photoManifest.ts
 ```
 
+- Do not commit generated photo manifests.
+- Do not generate or commit `src/photoManifest.ts`.
+- Do not embed full EXIF, reverse-geocoded addresses, POI names, provider IDs, source file paths, file sizes, modified times, camera metadata, or API provider details in a frontend manifest.
+- Keep only the minimum fields required for playback and rendering:
+
+```ts
+id
+fileName
+takenAt
+lat
+lng
+fileType
+rawUrl
+```
+
+- Exact GPS coordinates and timestamps are still private data. They may exist in ignored local generated files for the app to render the route, but must not be committed.
 - If a photo lacks GPS or taken time, skip it rather than guessing.
 
 ## Git Hygiene
 
-- Commit source code, scripts, docs, and generated `src/photoManifest.ts` when it is part of the app behavior.
+- Commit source code, scripts, and docs only.
 - Do not commit `config/`, `src/generated/`, `photos/`, or API caches.
+- If a privacy-bearing generated file is accidentally committed, remove it from the current tree and rewrite Git history before pushing.
 - When the worktree has unrelated user changes, stage only the files required for the current task.

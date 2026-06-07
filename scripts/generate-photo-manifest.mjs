@@ -5,9 +5,8 @@ import convertHeic from 'heic-convert';
 
 const rootDir = process.cwd();
 const photosDir = path.join(rootDir, 'photos');
-const outputFile = path.join(rootDir, 'src', 'photoManifest.ts');
+const outputFile = path.join(rootDir, 'src', 'generated', 'photoManifest.ts');
 const generatedPreviewDir = path.join(rootDir, 'src', 'generated', 'photo-previews');
-const locationCacheFile = path.join(rootDir, 'src', 'generated', 'location-cache.json');
 const supportedExtensions = new Set(['.heic', '.heif', '.jpg', '.jpeg', '.png', '.tif', '.tiff']);
 const metadataOptions = {
   tiff: true,
@@ -52,7 +51,6 @@ async function main() {
 
   summary.total = files.length;
 
-  const locationCache = await readJson(locationCacheFile, {});
   const photos = [];
   for (const filePath of files) {
     try {
@@ -75,42 +73,16 @@ async function main() {
       }
 
       const relativePath = path.relative(rootDir, filePath).split(path.sep).join('/');
+      const fileName = path.basename(filePath);
       const preview = await ensureBrowserPreview(filePath, relativePath);
-      const sourceStat = await fs.stat(filePath);
-      const sourceFileType = inferType(filePath);
-      const cachedLocations = getCachedLocations(locationCache, lat, lng);
       photos.push({
-        id: `${relativePath}-${takenAt.toISOString()}`,
-        fileName: path.basename(filePath),
-        relativePath,
+        id: `${fileName}-${takenAt.toISOString()}`,
+        fileName,
         previewPath: preview.relativePath,
         takenAt: takenAt.toISOString(),
         lat,
         lng,
         fileType: preview.fileType,
-        sourceFileType,
-        metadata: {
-          file: {
-            name: path.basename(filePath),
-            relativePath,
-            previewPath: preview.relativePath,
-            extension: path.extname(filePath).toLowerCase(),
-            sourceFileType,
-            previewFileType: preview.fileType,
-            sizeBytes: sourceStat.size,
-            modifiedAt: sourceStat.mtime.toISOString(),
-          },
-          derived: {
-            takenAt: takenAt.toISOString(),
-            takenAtSource: takenAtInfo.source,
-            latitude: lat,
-            longitude: lng,
-            locationSource: getLocationSource(metadata),
-            location: selectLocation(cachedLocations),
-            locationProviders: cachedLocations,
-          },
-          exif: sanitizeMetadata(metadata),
-        },
       });
       summary.imported += 1;
     } catch {
@@ -189,8 +161,6 @@ async function writeManifest(photos) {
     lat: ${photo.lat},
     lng: ${photo.lng},
     fileType: ${JSON.stringify(photo.fileType)},
-    sourceFileType: ${JSON.stringify(photo.sourceFileType)},
-    metadata: ${JSON.stringify(photo.metadata, null, 4).replace(/^/gm, '    ').trimStart()},
     rawUrl: new URL(${JSON.stringify(assetPath)}, import.meta.url).href,
   }`;
     })
@@ -203,54 +173,7 @@ async function writeManifest(photos) {
   lat: number;
   lng: number;
   fileType: string;
-  sourceFileType: string;
-  metadata: PhotoMetadata;
   rawUrl: string;
-};
-
-export type PhotoMetadataValue =
-  | string
-  | number
-  | boolean
-  | null
-  | PhotoMetadataValue[]
-  | { [key: string]: PhotoMetadataValue };
-
-export type PhotoMetadata = {
-  file: {
-    name: string;
-    relativePath: string;
-    previewPath: string;
-    extension: string;
-    sourceFileType: string;
-    previewFileType: string;
-    sizeBytes: number;
-    modifiedAt: string;
-  };
-  derived: {
-    takenAt: string;
-    takenAtSource: string;
-    latitude: number;
-    longitude: number;
-    locationSource: string;
-    location: PhotoResolvedLocation | null;
-    locationProviders: { [provider: string]: PhotoResolvedLocation };
-  };
-  exif: { [key: string]: PhotoMetadataValue };
-};
-
-export type PhotoResolvedLocation = {
-  provider: string;
-  providerPlaceId: string | null;
-  name: string | null;
-  poi: string | null;
-  address: string | null;
-  country: string | null;
-  province: string | null;
-  city: string | null;
-  district: string | null;
-  street: string | null;
-  queriedAt: string;
 };
 
 export const photoManifest: PhotoManifestItem[] = [
@@ -279,98 +202,6 @@ function findTakenAt(metadata) {
   }
 
   return null;
-}
-
-function getLocationSource(metadata) {
-  if (metadata?.latitude != null && metadata?.longitude != null) return 'latitude/longitude';
-  if (metadata?.GPSLatitude != null && metadata?.GPSLongitude != null) return 'GPSLatitude/GPSLongitude';
-  return 'unknown';
-}
-
-function getCachedLocations(locationCache, lat, lng) {
-  const providers = locationCache[getCoordinateKey(lat, lng)] ?? {};
-
-  return Object.fromEntries(
-    Object.entries(providers).map(([provider, location]) => [provider, stripRawLocation(location)]),
-  );
-}
-
-function selectLocation(locations) {
-  for (const provider of ['amap', 'geoapify', 'nominatim']) {
-    if (locations[provider]) return locations[provider];
-  }
-
-  return Object.values(locations)[0] ?? null;
-}
-
-function stripRawLocation(location) {
-  return {
-    provider: normalizeText(location.provider) ?? 'unknown',
-    providerPlaceId: normalizeText(location.providerPlaceId),
-    name: normalizeText(location.name),
-    poi: normalizeText(location.poi),
-    address: normalizeText(location.address),
-    country: normalizeText(location.country),
-    province: normalizeText(location.province),
-    city: normalizeText(location.city),
-    district: normalizeText(location.district),
-    street: normalizeText(location.street),
-    queriedAt: normalizeText(location.queriedAt) ?? '',
-  };
-}
-
-function normalizeText(value) {
-  if (typeof value === 'string') return value || null;
-  if (Array.isArray(value)) return value.find((item) => typeof item === 'string' && item) ?? null;
-  if (value == null) return null;
-  return String(value);
-}
-
-function getCoordinateKey(lat, lng) {
-  return `${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
-}
-
-async function readJson(filePath, fallback) {
-  try {
-    return JSON.parse(await fs.readFile(filePath, 'utf8'));
-  } catch {
-    return fallback;
-  }
-}
-
-function sanitizeMetadata(value, seen = new WeakSet()) {
-  if (value == null) return null;
-
-  if (typeof value === 'string' || typeof value === 'boolean') return value;
-
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value.toISOString();
-  }
-
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
-    return null;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeMetadata(item, seen));
-  }
-
-  if (typeof value === 'object') {
-    if (seen.has(value)) return null;
-    seen.add(value);
-
-    return Object.fromEntries(
-      Object.entries(value)
-        .map(([key, item]) => [key, sanitizeMetadata(item, seen)])
-        .filter(([, item]) => item !== undefined),
-    );
-  }
-
-  return undefined;
 }
 
 function inferType(filePath) {

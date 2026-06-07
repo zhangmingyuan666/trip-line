@@ -39,7 +39,7 @@ AMAP_WEB_SERVICE_KEY=your_key
 # NOMINATIM_EMAIL=you@example.com
 ```
 
-查询结果会缓存在 `src/generated/location-cache.json`，后续不会重复请求同一个经纬度。`npm run generate:photos` 会把缓存里的标准化地点合并到 `metadata.derived.location`，并把不同服务商结果放到 `metadata.derived.locationProviders`。
+查询结果会缓存在 `src/generated/location-cache.json`，后续不会重复请求同一个经纬度。`src/generated/` 是本地生成目录，不提交到远端；`npm run generate:photos` 只生成应用运行所需的最小照片清单，不会把逆地理地址或完整 EXIF 写入源码。
 
 安全规则：
 
@@ -51,7 +51,7 @@ AMAP_WEB_SERVICE_KEY=your_key
 ## 第一版能力
 
 - 自动扫描 `photos/` 目录
-- 读取 EXIF GPS 和拍摄时间，生成展示清单
+- 读取 EXIF GPS 和拍摄时间，生成本地展示清单
 - 支持 HEIC 元数据读取，浏览器端转换 JPEG 预览
 - 按拍摄时间排序
 - 地图上显示完整轨迹和已播放轨迹

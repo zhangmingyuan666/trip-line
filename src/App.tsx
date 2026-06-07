@@ -3,7 +3,7 @@ import { ImageOff } from 'lucide-react';
 import FootprintMap from './FootprintMap';
 import { CompactPlayToggle } from './components/CompactPlayToggle';
 import { DebugControlPanel } from './components/DebugControlPanel';
-import { photoManifest } from './photoManifest';
+import { photoManifest } from './generated/photoManifest';
 import { formatDateTime, formatDate } from './photoFormat';
 import type { MapTheme, PhotoPoint, PlaybackSpeed } from './types';
 
@@ -16,8 +16,6 @@ const initialPhotos: PhotoPoint[] = photoManifest.map((photo) => ({
   imageUrl: photo.rawUrl,
   rawUrl: photo.rawUrl,
   fileType: photo.fileType,
-  sourceFileType: photo.sourceFileType,
-  metadata: photo.metadata,
 }));
 
 type PhotoAnchor = {
