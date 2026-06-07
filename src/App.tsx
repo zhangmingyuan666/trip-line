@@ -24,6 +24,7 @@ type PhotoAnchor = {
 };
 
 type PhotoPopoverPlacement = 'left' | 'right';
+type PhotoPreviewStyle = CSSProperties & { '--popover-placement': PhotoPopoverPlacement };
 
 export default function App() {
   const photos = initialPhotos;
@@ -145,6 +146,16 @@ export default function App() {
           <div className="photo-meta">
             <strong>{currentPhoto.fileName}</strong>
             <span>{formatDateTime(currentPhoto.takenAt)}</span>
+            <dl className="photo-details" aria-label="照片信息">
+              <div>
+                <dt>格式</dt>
+                <dd>{formatFileType(currentPhoto.fileType)}</dd>
+              </div>
+              <div>
+                <dt>坐标</dt>
+                <dd>{formatCoordinatePair(currentPhoto)}</dd>
+              </div>
+            </dl>
           </div>
         </aside>
       )}
@@ -161,7 +172,7 @@ export default function App() {
   );
 }
 
-function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): (CSSProperties & { '--popover-placement': PhotoPopoverPlacement }) | undefined {
+function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): PhotoPreviewStyle | undefined {
   if (!anchor || typeof window === 'undefined') return undefined;
   if (!Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return undefined;
 
@@ -171,7 +182,7 @@ function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): (CSSProperties & { '
   const margin = isCompact ? 12 : 24;
   const gap = isCompact ? 11 : 14;
   const width = isCompact ? Math.min(148, Math.max(124, viewportWidth - 64)) : Math.min(184, viewportWidth - 48);
-  const height = width * (16 / 9) + (isCompact ? 54 : 58);
+  const height = width * (16 / 9) + (isCompact ? 92 : 88);
   const maxLeft = Math.max(margin, viewportWidth - width - margin);
   const maxTop = Math.max(margin, viewportHeight - height - margin);
   const boundedAnchor = {
@@ -199,6 +210,25 @@ function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): (CSSProperties & { '
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function formatFileType(fileType: string): string {
+  const [, subtype] = fileType.split('/');
+
+  if (!subtype) return fileType.toUpperCase();
+  if (subtype === 'jpeg') return 'JPEG';
+
+  return subtype.toUpperCase();
+}
+
+function formatCoordinatePair(photo: PhotoPoint): string {
+  return `${formatCoordinate(photo.lat, 'N', 'S')} ${formatCoordinate(photo.lng, 'E', 'W')}`;
+}
+
+function formatCoordinate(value: number, positiveDirection: string, negativeDirection: string): string {
+  const direction = value >= 0 ? positiveDirection : negativeDirection;
+
+  return `${direction} ${Math.abs(value).toFixed(4)}`;
 }
 
 function preloadUpcomingPhotos(photos: PhotoPoint[], currentIndex: number, lookaheadCount: number) {
