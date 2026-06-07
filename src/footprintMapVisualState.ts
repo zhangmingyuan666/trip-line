@@ -1,5 +1,13 @@
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
-import { pointFeature, pointsFeatureCollection, routeFeature, toLngLat, type LngLat } from './mapUtils';
+import {
+  pointFeature,
+  pointsFeatureCollection,
+  routeCoordinatesForPhotos,
+  routeFeature,
+  routeSegmentCoordinates,
+  toLngLat,
+  type LngLat,
+} from './mapUtils';
 import type { PhotoPoint } from './types';
 import { emptyLine, emptyPoints, setSourceData } from './footprintMapLayers';
 
@@ -41,13 +49,15 @@ export function setHoldingVisualState(
 ) {
   const currentCoordinate = coordinates[currentIndex];
   const nextCoordinate = coordinates[currentIndex + 1];
-  const pastCoordinates = coordinates.slice(0, currentIndex + 1);
+  const pastCoordinates = routeCoordinatesForPhotos(photos, currentIndex);
+  const upcomingCoordinates =
+    currentCoordinate && nextCoordinate ? routeSegmentCoordinates(photos[currentIndex], photos[currentIndex + 1]) : [];
 
   setSourceData(map, 'route-past', pastCoordinates.length > 1 ? routeFeature(pastCoordinates) : emptyLine);
   setSourceData(
     map,
     'route-upcoming',
-    currentCoordinate && nextCoordinate ? routeFeature([currentCoordinate, nextCoordinate]) : emptyLine,
+    upcomingCoordinates.length > 1 ? routeFeature(upcomingCoordinates) : emptyLine,
   );
   setSourceData(map, 'route-active', pastCoordinates.length > 1 ? routeFeature(pastCoordinates) : emptyLine);
   setSourceData(map, 'points-past', pointsFeatureCollection(photos.slice(0, currentIndex)));
@@ -64,13 +74,15 @@ export function setMovingVisualState(
 ) {
   const fromCoordinate = coordinates[fromIndex];
   const toCoordinate = coordinates[fromIndex + 1];
-  const pastCoordinates = coordinates.slice(0, fromIndex + 1);
+  const pastCoordinates = routeCoordinatesForPhotos(photos, fromIndex);
+  const upcomingCoordinates =
+    fromCoordinate && toCoordinate ? routeSegmentCoordinates(photos[fromIndex], photos[fromIndex + 1]) : [];
 
   setSourceData(map, 'route-past', pastCoordinates.length > 1 ? routeFeature(pastCoordinates) : emptyLine);
   setSourceData(
     map,
     'route-upcoming',
-    fromCoordinate && toCoordinate ? routeFeature([fromCoordinate, toCoordinate]) : emptyLine,
+    upcomingCoordinates.length > 1 ? routeFeature(upcomingCoordinates) : emptyLine,
   );
   setSourceData(map, 'route-active', pastCoordinates.length > 1 ? routeFeature(pastCoordinates) : emptyLine);
   setSourceData(map, 'points-past', pointsFeatureCollection(photos.slice(0, fromIndex + 1)));

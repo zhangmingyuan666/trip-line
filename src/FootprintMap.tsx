@@ -12,10 +12,11 @@ import {
   distanceKm,
   durationForDistance,
   holdDurationForSpeed,
-  interpolate,
+  interpolateGreatCircle,
   interpolateBearing,
   interpolateNumber,
   pointFeature,
+  routeCoordinatesWithProgress,
   routeFeature,
   segmentProgress,
   toLngLat,
@@ -278,8 +279,6 @@ export default function FootprintMap({
     const to = photos[fromIndex + 1];
     if (!map || !from || !to) return;
 
-    const fromCoord = toLngLat(from);
-    const toCoord = toLngLat(to);
     const distance = distanceKm(from, to);
     const duration = durationForDistance(distance, speedRef.current);
     const targetZoom = zoomForDistance(distance);
@@ -304,8 +303,8 @@ export default function FootprintMap({
       const rawProgress = Math.min(1, (time - startTime) / duration);
       const cameraProgress = appleEaseInOut(segmentProgress(rawProgress, 0, cameraLeadEnd));
       const movementProgress = appleEaseInOut(segmentProgress(rawProgress, movementStart, 1));
-      const currentCoord = interpolate(fromCoord, toCoord, movementProgress);
-      const progressCoordinates = [...coordinates.slice(0, fromIndex + 1), currentCoord];
+      const currentCoord = interpolateGreatCircle(from, to, movementProgress);
+      const progressCoordinates = routeCoordinatesWithProgress(photos, fromIndex, movementProgress);
 
       setSourceData(map, 'route-active', routeFeature(progressCoordinates));
       setSourceData(map, 'point-moving', pointFeature(currentCoord));
