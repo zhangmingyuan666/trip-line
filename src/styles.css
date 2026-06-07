@@ -61,6 +61,32 @@ button {
   backdrop-filter: blur(16px);
 }
 
+.play-toggle-shell {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 6;
+}
+
+.play-toggle-button {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  color: #ffffff;
+  background: rgba(20, 63, 95, 0.94);
+  box-shadow: 0 16px 34px rgba(11, 31, 45, 0.24);
+  backdrop-filter: blur(12px);
+}
+
+.play-toggle-button:hover,
+.play-toggle-button:focus-visible {
+  background: rgba(20, 63, 95, 1);
+  outline: none;
+}
+
 .brand-row,
 .playback-row,
 .speed-row,
@@ -505,6 +531,11 @@ h1 {
 
   .brand-row {
     margin-bottom: 12px;
+  }
+
+  .play-toggle-shell {
+    top: 12px;
+    left: 12px;
   }
 
   h1 {
