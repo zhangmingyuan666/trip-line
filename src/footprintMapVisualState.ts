@@ -8,23 +8,30 @@ import {
   toLngLat,
   type LngLat,
 } from './mapUtils';
-import type { PhotoPoint } from './types';
-import { emptyLine, emptyPoints, setSourceData } from './footprintMapLayers';
+import type { MapTheme, PhotoPoint } from './types';
+import { emptyLine, emptyPoints, setFootprintLayerMode, setSourceData } from './footprintMapLayers';
 
-export function syncMapData(map: MapLibreMap, photos: PhotoPoint[], currentIndex: number, shouldFitBounds: boolean) {
-  if (!map.getSource('route-past')) return;
+export function syncMapData(
+  map: MapLibreMap,
+  photos: PhotoPoint[],
+  currentIndex: number,
+  shouldFitBounds: boolean,
+  mapTheme: MapTheme,
+): number {
+  if (!map.getSource('route-past')) return 0;
 
   const coordinates = photos.map(toLngLat);
   const visibleCoordinates = coordinates.slice(0, currentIndex + 1);
-  setHoldingVisualState(map, photos, coordinates, currentIndex);
+  setHoldingVisualState(map, photos, coordinates, currentIndex, mapTheme);
 
   if (!shouldFitBounds) {
-    return;
+    return 0;
   }
 
   if (visibleCoordinates.length === 1) {
-    map.easeTo({ center: visibleCoordinates[0], zoom: 13, duration: 700 });
-    return;
+    const duration = 700;
+    map.easeTo({ center: visibleCoordinates[0], zoom: 13, duration });
+    return duration;
   }
 
   if (visibleCoordinates.length > 1) {
@@ -33,12 +40,16 @@ export function syncMapData(map: MapLibreMap, photos: PhotoPoint[], currentIndex
       new maplibregl.LngLatBounds(visibleCoordinates[0], visibleCoordinates[0]),
     );
 
+    const duration = 900;
     map.fitBounds(bounds, {
       padding: { top: 80, right: 80, bottom: 160, left: 360 },
-      duration: 900,
+      duration,
       maxZoom: 12,
     });
+    return duration;
   }
+
+  return 0;
 }
 
 export function setHoldingVisualState(
@@ -46,6 +57,7 @@ export function setHoldingVisualState(
   photos: PhotoPoint[],
   coordinates: LngLat[],
   currentIndex: number,
+  mapTheme: MapTheme,
 ) {
   const currentCoordinate = coordinates[currentIndex];
   const nextCoordinate = coordinates[currentIndex + 1];
@@ -59,11 +71,12 @@ export function setHoldingVisualState(
     'route-upcoming',
     upcomingCoordinates.length > 1 ? routeFeature(upcomingCoordinates) : emptyLine,
   );
-  setSourceData(map, 'route-active', pastCoordinates.length > 1 ? routeFeature(pastCoordinates) : emptyLine);
+  setSourceData(map, 'route-active', emptyLine);
   setSourceData(map, 'points-past', pointsFeatureCollection(photos.slice(0, currentIndex)));
   setSourceData(map, 'point-current', currentCoordinate ? pointFeature(currentCoordinate) : emptyPoints);
   setSourceData(map, 'point-upcoming', nextCoordinate ? pointFeature(nextCoordinate) : emptyPoints);
   setSourceData(map, 'point-moving', emptyPoints);
+  setFootprintLayerMode(map, 'holding', mapTheme);
 }
 
 export function setMovingVisualState(
@@ -71,6 +84,7 @@ export function setMovingVisualState(
   photos: PhotoPoint[],
   coordinates: LngLat[],
   fromIndex: number,
+  mapTheme: MapTheme,
 ) {
   const fromCoordinate = coordinates[fromIndex];
   const toCoordinate = coordinates[fromIndex + 1];
@@ -84,9 +98,10 @@ export function setMovingVisualState(
     'route-upcoming',
     upcomingCoordinates.length > 1 ? routeFeature(upcomingCoordinates) : emptyLine,
   );
-  setSourceData(map, 'route-active', pastCoordinates.length > 1 ? routeFeature(pastCoordinates) : emptyLine);
+  setSourceData(map, 'route-active', emptyLine);
   setSourceData(map, 'points-past', pointsFeatureCollection(photos.slice(0, fromIndex + 1)));
-  setSourceData(map, 'point-current', emptyPoints);
+  setSourceData(map, 'point-current', fromCoordinate ? pointFeature(fromCoordinate) : emptyPoints);
   setSourceData(map, 'point-upcoming', toCoordinate ? pointFeature(toCoordinate) : emptyPoints);
-  setSourceData(map, 'point-moving', fromCoordinate ? pointFeature(fromCoordinate) : emptyPoints);
+  setSourceData(map, 'point-moving', emptyPoints);
+  setFootprintLayerMode(map, 'moving', mapTheme);
 }

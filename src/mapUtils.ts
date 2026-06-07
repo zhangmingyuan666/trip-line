@@ -35,21 +35,22 @@ export function routeCoordinatesForPhotos(photos: PhotoPoint[], throughIndex: nu
   return coordinates;
 }
 
-export function routeCoordinatesWithProgress(photos: PhotoPoint[], fromIndex: number, progress: number): LngLat[] {
-  const pastCoordinates = routeCoordinatesForPhotos(photos, fromIndex);
-  const from = photos[fromIndex];
-  const to = photos[fromIndex + 1];
+export function routeSegmentCoordinatesWithProgress(
+  from: PhotoPoint,
+  to: PhotoPoint,
+  progress: number,
+  segmentCoordinates = routeSegmentCoordinates(from, to),
+): LngLat[] {
+  const safeProgress = clamp01(progress);
+  if (safeProgress <= 0) return [];
+  if (safeProgress >= 1) return segmentCoordinates;
 
-  if (!from || !to) return pastCoordinates;
+  const currentCoordinate = interpolateGreatCircle(from, to, safeProgress);
+  const visibleSegmentCoordinates = segmentCoordinates.filter(
+    (_, index) => index > 0 && index / (segmentCoordinates.length - 1) < safeProgress,
+  );
 
-  const currentCoordinate = interpolateGreatCircle(from, to, progress);
-  const segmentCoordinates = routeSegmentCoordinates(from, to);
-  const visibleSegmentCoordinates = segmentCoordinates.filter((coordinate) => {
-    const segmentProgress = progressAlongSegment(from, to, coordinate);
-    return segmentProgress > 0 && segmentProgress < progress;
-  });
-
-  return [...pastCoordinates, ...visibleSegmentCoordinates, currentCoordinate];
+  return [segmentCoordinates[0], ...visibleSegmentCoordinates, currentCoordinate];
 }
 
 export function durationForDistance(distance: number, speed: PlaybackSpeed): number {
@@ -94,13 +95,6 @@ export function zoomForDistance(distance: number): number {
   return stops[stops.length - 1][1];
 }
 
-export function interpolate(from: LngLat, to: LngLat, progress: number): LngLat {
-  return [
-    from[0] + (to[0] - from[0]) * progress,
-    from[1] + (to[1] - from[1]) * progress,
-  ];
-}
-
 export function interpolateGreatCircle(from: PhotoPoint, to: PhotoPoint, progress: number): LngLat {
   const distance = distanceKm(from, to);
   if (distance === 0) return toLngLat(from);
@@ -110,17 +104,6 @@ export function interpolateGreatCircle(from: PhotoPoint, to: PhotoPoint, progres
   });
 
   return point.geometry.coordinates as LngLat;
-}
-
-function progressAlongSegment(from: PhotoPoint, to: PhotoPoint, coordinate: LngLat): number {
-  const totalDistance = distanceKm(from, to);
-  if (totalDistance === 0) return 1;
-
-  const travelledDistance = turf.distance(turf.point(toLngLat(from)), turf.point(coordinate), {
-    units: 'kilometers',
-  });
-
-  return clamp01(travelledDistance / totalDistance);
 }
 
 export function easeInOutCubic(value: number): number {

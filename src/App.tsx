@@ -29,12 +29,13 @@ export default function App() {
   const photos = initialPhotos;
   const showDebugUi = import.meta.env.DEV;
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(initialPhotos.length > 1);
   const [speed, setSpeed] = useState<PlaybackSpeed>('normal');
   const [mapTheme, setMapTheme] = useState<MapTheme>('clean');
   const [photoAnchor, setPhotoAnchor] = useState<PhotoAnchor | null>(null);
 
-  const currentPhoto = photos[currentIndex];
+  const currentPhoto = photos[previewIndex];
   const hasRoute = photos.length > 1;
 
   const dateRange = useMemo(() => {
@@ -47,12 +48,14 @@ export default function App() {
   function resetPlayback() {
     setIsPlaying(false);
     setCurrentIndex(0);
+    setPreviewIndex(0);
   }
 
   function togglePlayback() {
     if (!hasRoute) return;
     if (currentIndex >= photos.length - 1) {
       setCurrentIndex(0);
+      setPreviewIndex(0);
     }
     setIsPlaying((value) => !value);
   }
@@ -88,8 +91,14 @@ export default function App() {
   const shouldShowPhotoPopover = Boolean(currentPhoto && photoAnchor && photoPreviewStyle);
 
   useEffect(() => {
-    preloadUpcomingPhotos(photos, currentIndex, 3);
-  }, [currentIndex, photos]);
+    if (!isPlaying) {
+      setPreviewIndex(currentIndex);
+    }
+  }, [currentIndex, isPlaying]);
+
+  useEffect(() => {
+    preloadUpcomingPhotos(photos, previewIndex, 3);
+  }, [previewIndex, photos]);
 
   return (
     <main className="app-shell">
@@ -101,6 +110,7 @@ export default function App() {
         mapTheme={mapTheme}
         onAnchorChange={handlePhotoAnchorChange}
         onIndexChange={setCurrentIndex}
+        onPreviewIndexChange={setPreviewIndex}
         onDone={handlePlaybackDone}
       />
 

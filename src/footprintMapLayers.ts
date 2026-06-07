@@ -6,9 +6,49 @@ import type { MapTheme } from './types';
 export const emptyLine = routeFeature([]);
 export const emptyPoints = pointsFeatureCollection([]);
 
+type FootprintLayerMode = 'holding' | 'moving';
+
+const noTransition = { duration: 0, delay: 0 };
+
 export function setSourceData(map: MapLibreMap, sourceId: string, data: GeoJSON.Feature | GeoJSON.FeatureCollection) {
   const source = map.getSource(sourceId) as GeoJSONSource | undefined;
   source?.setData(data);
+}
+
+export function setFootprintLayerMode(map: MapLibreMap, mode: FootprintLayerMode, mapTheme: MapTheme) {
+  const isDark = isDarkMapTheme(mapTheme);
+  const upcomingOpacity = isDark ? 0.48 : 0.42;
+
+  setPaintPropertyIfLayerExists(map, 'route-upcoming', 'line-opacity', mode === 'moving' ? upcomingOpacity * 0.72 : upcomingOpacity);
+  setPaintPropertyIfLayerExists(map, 'point-current', 'circle-opacity', 1);
+  setPaintPropertyIfLayerExists(map, 'point-current', 'circle-stroke-opacity', 1);
+  setPaintPropertyIfLayerExists(map, 'point-moving', 'circle-opacity', 0);
+  setPaintPropertyIfLayerExists(map, 'point-moving', 'circle-stroke-opacity', 0);
+}
+
+function disableFootprintLayerTransitions(map: MapLibreMap) {
+  setPaintPropertyIfLayerExists(map, 'route-past', 'line-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'route-upcoming', 'line-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'route-active', 'line-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'points-past', 'circle-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'points-past', 'circle-stroke-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'point-upcoming', 'circle-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'point-upcoming', 'circle-stroke-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'point-current', 'circle-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'point-current', 'circle-stroke-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'point-moving', 'circle-opacity-transition', noTransition);
+  setPaintPropertyIfLayerExists(map, 'point-moving', 'circle-stroke-opacity-transition', noTransition);
+}
+
+function setPaintPropertyIfLayerExists(
+  map: MapLibreMap,
+  layerId: string,
+  property: string,
+  value: string | number | unknown[] | Record<string, unknown>,
+) {
+  if (map.getLayer(layerId)) {
+    map.setPaintProperty(layerId, property, value);
+  }
 }
 
 export function addFootprintSources(map: MapLibreMap) {
@@ -64,6 +104,10 @@ export function addFootprintSources(map: MapLibreMap) {
 
 export function addFootprintLayers(map: MapLibreMap, mapTheme: MapTheme) {
   const isDark = isDarkMapTheme(mapTheme);
+  const pastRouteColor = isDark ? '#9aa7b1' : '#365968';
+  const futureRouteColor = isDark ? '#d5dbe0' : '#496a7a';
+  const activeColor = '#f16f3a';
+  const pointHaloColor = isDark ? '#101820' : '#ffffff';
 
   if (!map.getLayer('route-past')) {
     map.addLayer({
@@ -71,9 +115,9 @@ export function addFootprintLayers(map: MapLibreMap, mapTheme: MapTheme) {
       type: 'line',
       source: 'route-past',
       paint: {
-        'line-color': isDark ? '#ffffff' : '#143f5f',
-        'line-opacity': isDark ? 0.22 : 0.24,
-        'line-width': 7,
+        'line-color': pastRouteColor,
+        'line-opacity': isDark ? 0.42 : 0.36,
+        'line-width': 4.5,
       },
       layout: {
         'line-cap': 'round',
@@ -88,10 +132,10 @@ export function addFootprintLayers(map: MapLibreMap, mapTheme: MapTheme) {
       type: 'line',
       source: 'route-upcoming',
       paint: {
-        'line-color': isDark ? '#ffffff' : '#143f5f',
-        'line-dasharray': [1.2, 1.4],
-        'line-opacity': isDark ? 0.28 : 0.32,
-        'line-width': 4,
+        'line-color': futureRouteColor,
+        'line-dasharray': [0.18, 2.15],
+        'line-opacity': isDark ? 0.48 : 0.42,
+        'line-width': 4.25,
       },
       layout: {
         'line-cap': 'round',
@@ -106,9 +150,9 @@ export function addFootprintLayers(map: MapLibreMap, mapTheme: MapTheme) {
       type: 'line',
       source: 'route-active',
       paint: {
-        'line-color': '#f07b3f',
-        'line-width': 5,
-        'line-opacity': 0.98,
+        'line-color': activeColor,
+        'line-width': 6,
+        'line-opacity': 0.92,
       },
       layout: {
         'line-cap': 'round',
@@ -123,10 +167,12 @@ export function addFootprintLayers(map: MapLibreMap, mapTheme: MapTheme) {
       type: 'circle',
       source: 'points-past',
       paint: {
-        'circle-color': '#ffffff',
-        'circle-radius': 4.5,
-        'circle-stroke-color': isDark ? '#f07b3f' : '#143f5f',
-        'circle-stroke-width': 2,
+        'circle-color': isDark ? '#1d2932' : '#ffffff',
+        'circle-opacity': isDark ? 0.72 : 0.82,
+        'circle-radius': 4,
+        'circle-stroke-color': pastRouteColor,
+        'circle-stroke-opacity': isDark ? 0.78 : 0.7,
+        'circle-stroke-width': 1.8,
       },
     });
   }
@@ -137,11 +183,12 @@ export function addFootprintLayers(map: MapLibreMap, mapTheme: MapTheme) {
       type: 'circle',
       source: 'point-upcoming',
       paint: {
-        'circle-color': '#ffffff',
-        'circle-radius': 5.5,
-        'circle-stroke-color': '#f07b3f',
-        'circle-stroke-opacity': 0.72,
-        'circle-stroke-width': 2.5,
+        'circle-color': isDark ? '#151f27' : '#ffffff',
+        'circle-opacity': 0.9,
+        'circle-radius': 5.25,
+        'circle-stroke-color': futureRouteColor,
+        'circle-stroke-opacity': 0.82,
+        'circle-stroke-width': 2.25,
       },
     });
   }
@@ -152,10 +199,12 @@ export function addFootprintLayers(map: MapLibreMap, mapTheme: MapTheme) {
       type: 'circle',
       source: 'point-current',
       paint: {
-        'circle-color': '#f07b3f',
-        'circle-radius': 8,
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 3,
+        'circle-color': activeColor,
+        'circle-opacity': 1,
+        'circle-radius': 8.5,
+        'circle-stroke-color': pointHaloColor,
+        'circle-stroke-opacity': 1,
+        'circle-stroke-width': 3.5,
       },
     });
   }
@@ -166,11 +215,15 @@ export function addFootprintLayers(map: MapLibreMap, mapTheme: MapTheme) {
       type: 'circle',
       source: 'point-moving',
       paint: {
-        'circle-color': '#f07b3f',
-        'circle-radius': 7,
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 3,
+        'circle-color': activeColor,
+        'circle-opacity': 0,
+        'circle-radius': 7.5,
+        'circle-stroke-color': pointHaloColor,
+        'circle-stroke-opacity': 0,
+        'circle-stroke-width': 3.25,
       },
     });
   }
+
+  disableFootprintLayerTransitions(map);
 }

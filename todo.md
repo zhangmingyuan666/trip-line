@@ -1,6 +1,6 @@
 - 轨迹过程优化
     - [x] 长距离虚线与实现不对齐
-    - 样式优化，past current future 样式diff
+    - [x] 样式优化，past current future 样式diff
 - 图片展示优化
     - 把图片的信息放进去，央视对齐苹果规范
     - Popover 展示，两个 popover 的弹出要没有diff，第一个Popover关闭动画进行期间已经要launch第二个popover的动画。目前有gap
