@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import FootprintMap from './FootprintMap';
 import { CompactPlayToggle } from './components/CompactPlayToggle';
@@ -25,6 +25,20 @@ type PhotoAnchor = {
 
 type PhotoPopoverPlacement = 'left' | 'right';
 type PhotoPreviewStyle = CSSProperties & { '--popover-placement': PhotoPopoverPlacement };
+type PhotoPopoverSnapshot = {
+  instanceId: string;
+  photo: PhotoPoint;
+  placement: PhotoPopoverPlacement;
+  style: PhotoPreviewStyle;
+};
+
+type PhotoPopoverProps = {
+  photo: PhotoPoint;
+  placement: PhotoPopoverPlacement;
+  state: 'entering' | 'leaving';
+  style: PhotoPreviewStyle;
+  onAnimationEnd?: () => void;
+};
 
 export default function App() {
   const photos = initialPhotos;
@@ -35,6 +49,9 @@ export default function App() {
   const [speed, setSpeed] = useState<PlaybackSpeed>('normal');
   const [mapTheme, setMapTheme] = useState<MapTheme>('clean');
   const [photoAnchor, setPhotoAnchor] = useState<PhotoAnchor | null>(null);
+  const [leavingPhotoPopovers, setLeavingPhotoPopovers] = useState<PhotoPopoverSnapshot[]>([]);
+  const lastActivePopoverRef = useRef<PhotoPopoverSnapshot | null>(null);
+  const popoverInstanceIdRef = useRef(0);
 
   const currentPhoto = photos[previewIndex];
   const hasRoute = photos.length > 1;
@@ -91,6 +108,22 @@ export default function App() {
   const popoverPlacement = photoPreviewStyle?.['--popover-placement'] ?? 'right';
   const shouldShowPhotoPopover = Boolean(currentPhoto && photoAnchor && photoPreviewStyle);
 
+  const queueLeavingPhotoPopover = useCallback((popover: PhotoPopoverSnapshot) => {
+    setLeavingPhotoPopovers((previousPopovers) => {
+      const nextPopovers = previousPopovers.filter(
+        (previousPopover) => previousPopover.photo.id !== popover.photo.id,
+      );
+
+      return [...nextPopovers, popover].slice(-3);
+    });
+  }, []);
+
+  const removeLeavingPhotoPopover = useCallback((instanceId: string) => {
+    setLeavingPhotoPopovers((previousPopovers) =>
+      previousPopovers.filter((popover) => popover.instanceId !== instanceId),
+    );
+  }, []);
+
   useEffect(() => {
     if (!isPlaying) {
       setPreviewIndex(currentIndex);
@@ -100,6 +133,51 @@ export default function App() {
   useEffect(() => {
     preloadUpcomingPhotos(photos, previewIndex, 3);
   }, [previewIndex, photos]);
+
+  useEffect(() => {
+    if (!currentPhoto || !photoPreviewStyle || !shouldShowPhotoPopover) {
+      if (lastActivePopoverRef.current) {
+        queueLeavingPhotoPopover(lastActivePopoverRef.current);
+        lastActivePopoverRef.current = null;
+      }
+
+      return;
+    }
+
+    const previousPopover = lastActivePopoverRef.current;
+    if (previousPopover && previousPopover.photo.id !== currentPhoto.id) {
+      queueLeavingPhotoPopover(previousPopover);
+    }
+
+    const instanceId =
+      previousPopover?.photo.id === currentPhoto.id
+        ? previousPopover.instanceId
+        : `${currentPhoto.id}-${popoverInstanceIdRef.current}`;
+
+    if (previousPopover?.photo.id !== currentPhoto.id) {
+      popoverInstanceIdRef.current += 1;
+    }
+
+    lastActivePopoverRef.current = {
+      instanceId,
+      photo: currentPhoto,
+      placement: popoverPlacement,
+      style: { ...photoPreviewStyle },
+    };
+
+    if (leavingPhotoPopovers.some((popover) => popover.photo.id === currentPhoto.id)) {
+      setLeavingPhotoPopovers((previousPopovers) =>
+        previousPopovers.filter((popover) => popover.photo.id !== currentPhoto.id),
+      );
+    }
+  }, [
+    currentPhoto,
+    leavingPhotoPopovers,
+    photoPreviewStyle,
+    popoverPlacement,
+    queueLeavingPhotoPopover,
+    shouldShowPhotoPopover,
+  ]);
 
   return (
     <main className="app-shell">
@@ -133,35 +211,29 @@ export default function App() {
         <CompactPlayToggle isPlaying={isPlaying} disabled={!hasRoute} onToggle={togglePlayback} />
       )}
 
-      {shouldShowPhotoPopover && (
-        <aside
-          className={`photo-popover is-${popoverPlacement}`}
-          key={currentPhoto.id}
+      {leavingPhotoPopovers.map((popover) => (
+        <PhotoPopover
+          key={popover.instanceId}
+          photo={popover.photo}
+          placement={popover.placement}
+          state="leaving"
+          style={popover.style}
+          onAnimationEnd={() => removeLeavingPhotoPopover(popover.instanceId)}
+        />
+      ))}
+
+      {shouldShowPhotoPopover && currentPhoto && photoPreviewStyle && (
+        <PhotoPopover
+          key={`active-${currentPhoto.id}`}
+          photo={currentPhoto}
+          placement={popoverPlacement}
+          state="entering"
           style={photoPreviewStyle}
-          aria-label="当前照片"
-        >
-          <div className="photo-frame">
-            <img src={currentPhoto.imageUrl} alt={currentPhoto.fileName} />
-          </div>
-          <div className="photo-meta">
-            <strong>{currentPhoto.fileName}</strong>
-            <span>{formatDateTime(currentPhoto.takenAt)}</span>
-            <dl className="photo-details" aria-label="照片信息">
-              <div>
-                <dt>格式</dt>
-                <dd>{formatFileType(currentPhoto.fileType)}</dd>
-              </div>
-              <div>
-                <dt>坐标</dt>
-                <dd>{formatCoordinatePair(currentPhoto)}</dd>
-              </div>
-            </dl>
-          </div>
-        </aside>
+        />
       )}
 
       {!currentPhoto && (
-        <aside className="photo-popover" aria-label="当前照片">
+        <aside className="photo-popover is-entering" aria-label="当前照片">
           <div className="empty-preview">
             <ImageOff size={26} />
             <span>暂无照片</span>
@@ -169,6 +241,35 @@ export default function App() {
         </aside>
       )}
     </main>
+  );
+}
+
+function PhotoPopover({ photo, placement, state, style, onAnimationEnd }: PhotoPopoverProps) {
+  return (
+    <aside
+      className={`photo-popover is-${placement} is-${state}`}
+      style={style}
+      aria-label="当前照片"
+      onAnimationEnd={onAnimationEnd}
+    >
+      <div className="photo-frame">
+        <img src={photo.imageUrl} alt={photo.fileName} />
+      </div>
+      <div className="photo-meta">
+        <strong>{photo.fileName}</strong>
+        <span>{formatDateTime(photo.takenAt)}</span>
+        <dl className="photo-details" aria-label="照片信息">
+          <div>
+            <dt>格式</dt>
+            <dd>{formatFileType(photo.fileType)}</dd>
+          </div>
+          <div>
+            <dt>坐标</dt>
+            <dd>{formatCoordinatePair(photo)}</dd>
+          </div>
+        </dl>
+      </div>
+    </aside>
   );
 }
 
