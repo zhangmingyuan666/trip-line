@@ -1,0 +1,4 @@
+interface:
+  display_name: "Record Dev Lessons"
+  short_description: "Capture confirmed development lessons"
+  default_prompt: "Use $record-dev-lessons to record the goal outcome and avoidable mistakes from this development conversation."
