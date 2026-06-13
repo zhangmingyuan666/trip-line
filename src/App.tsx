@@ -18,14 +18,12 @@ const initialPhotos: PhotoPoint[] = photoManifest.map((photo) => ({
   fileType: photo.fileType,
 }));
 
-type PhotoPopoverPlacement = 'left' | 'right';
-
 type PhotoAnchor = {
   x: number;
   y: number;
-  preferredPlacement?: PhotoPopoverPlacement;
 };
 
+type PhotoPopoverPlacement = 'left' | 'right';
 type PhotoPreviewStyle = CSSProperties & { '--popover-placement': PhotoPopoverPlacement };
 type PhotoPopoverSnapshot = {
   instanceId: string;
@@ -96,14 +94,9 @@ export default function App() {
       const nextAnchor = {
         x: Math.round(anchor.x),
         y: Math.round(anchor.y),
-        preferredPlacement: anchor.preferredPlacement,
       };
 
-      if (
-        previousAnchor?.x === nextAnchor.x &&
-        previousAnchor.y === nextAnchor.y &&
-        previousAnchor.preferredPlacement === nextAnchor.preferredPlacement
-      ) {
+      if (previousAnchor?.x === nextAnchor.x && previousAnchor.y === nextAnchor.y) {
         return previousAnchor;
       }
 
@@ -297,9 +290,8 @@ function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): PhotoPreviewStyle | 
     x: clamp(anchor.x, margin, viewportWidth - margin),
     y: clamp(anchor.y, margin, viewportHeight - margin),
   };
-  const canPlaceRight = boundedAnchor.x + gap + width <= viewportWidth - margin;
-  const canPlaceLeft = boundedAnchor.x - width - gap >= margin;
-  const placement = choosePopoverPlacement(anchor.preferredPlacement, canPlaceLeft, canPlaceRight);
+  const placement: PhotoPopoverPlacement =
+    boundedAnchor.x + gap + width > viewportWidth - margin ? 'left' : 'right';
   let left = boundedAnchor.x + gap;
 
   if (placement === 'left') {
@@ -319,17 +311,6 @@ function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): PhotoPreviewStyle | 
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function choosePopoverPlacement(
-  preferredPlacement: PhotoPopoverPlacement | undefined,
-  canPlaceLeft: boolean,
-  canPlaceRight: boolean,
-): PhotoPopoverPlacement {
-  if (preferredPlacement === 'left' && canPlaceLeft) return 'left';
-  if (preferredPlacement === 'right' && canPlaceRight) return 'right';
-  if (canPlaceRight) return 'right';
-  return 'left';
 }
 
 function formatFileType(fileType: string): string {

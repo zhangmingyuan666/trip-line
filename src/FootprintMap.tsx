@@ -35,7 +35,7 @@ type FootprintMapProps = {
   isPlaying: boolean;
   speed: PlaybackSpeed;
   mapTheme: MapTheme;
-  onAnchorChange: (anchor: { x: number; y: number; preferredPlacement?: 'left' | 'right' } | null) => void;
+  onAnchorChange: (anchor: { x: number; y: number } | null) => void;
   onIndexChange: (index: number) => void;
   onPreviewIndexChange: (index: number) => void;
   onDone: () => void;
@@ -490,15 +490,10 @@ export default function FootprintMap({
       return;
     }
 
-    const activeIndex = activePopoverIndexRef.current;
     const point = map.project(coordinate);
     const stableAnchor = stabilizeProjectedAnchor({ x: point.x, y: point.y }, map, lastPublishedAnchorRef.current);
     lastPublishedAnchorRef.current = stableAnchor;
-    onAnchorChangeRef.current({
-      ...stableAnchor,
-      preferredPlacement:
-        activeIndex === null ? undefined : getPreferredPopoverPlacement(map, coordinates, activeIndex),
-    });
+    onAnchorChangeRef.current(stableAnchor);
   }
 
   return <div ref={containerRef} className="map-canvas" aria-label="照片足迹地图" />;
@@ -506,21 +501,4 @@ export default function FootprintMap({
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-function getPreferredPopoverPlacement(
-  map: MapLibreMap,
-  coordinates: Array<[number, number]>,
-  index: number,
-): 'left' | 'right' | undefined {
-  const coordinate = coordinates[index];
-  const neighborCoordinate = coordinates[index - 1] ?? coordinates[index + 1];
-  if (!coordinate || !neighborCoordinate) return undefined;
-
-  const point = map.project(coordinate);
-  const neighborPoint = map.project(neighborCoordinate);
-  const horizontalDelta = point.x - neighborPoint.x;
-  if (Math.abs(horizontalDelta) < 8) return undefined;
-
-  return horizontalDelta > 0 ? 'right' : 'left';
 }
