@@ -1,11 +1,15 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageOff } from 'lucide-react';
-import FootprintMap from './FootprintMap';
-import { CompactPlayToggle } from './components/CompactPlayToggle';
-import { DebugControlPanel } from './components/DebugControlPanel';
-import { photoManifest } from './generated/photoManifest';
-import { formatDateTime, formatDate } from './photoFormat';
-import type { MapTheme, PhotoPoint, PlaybackSpeed } from './types';
+import { CompactPlayToggle } from '../components/controls/CompactPlayToggle';
+import { DebugControlPanel } from '../components/controls/DebugControlPanel';
+import FootprintMap from '../components/footprint-map/FootprintMap';
+import { PhotoPopover } from '../components/photo-popover/PhotoPopover';
+import { getAnchoredPhotoStyle } from '../components/photo-popover/layout';
+import type { PhotoAnchor, PhotoPopoverSnapshot } from '../components/photo-popover/types';
+import { formatDate } from '../core/photo/format';
+import { preloadUpcomingPhotos } from '../core/photo/preload';
+import type { MapTheme, PhotoPoint, PlaybackSpeed } from '../core/photo/types';
+import { photoManifest } from '../generated/photoManifest';
 
 const initialPhotos: PhotoPoint[] = photoManifest.map((photo) => ({
   id: photo.id,
@@ -18,29 +22,7 @@ const initialPhotos: PhotoPoint[] = photoManifest.map((photo) => ({
   fileType: photo.fileType,
 }));
 
-type PhotoAnchor = {
-  x: number;
-  y: number;
-};
-
-type PhotoPopoverPlacement = 'left' | 'right';
-type PhotoPreviewStyle = CSSProperties & { '--popover-placement': PhotoPopoverPlacement };
-type PhotoPopoverSnapshot = {
-  instanceId: string;
-  photo: PhotoPoint;
-  placement: PhotoPopoverPlacement;
-  style: PhotoPreviewStyle;
-};
-
-type PhotoPopoverProps = {
-  photo: PhotoPoint;
-  placement: PhotoPopoverPlacement;
-  state: 'entering' | 'leaving';
-  style: PhotoPreviewStyle;
-  onAnimationEnd?: () => void;
-};
-
-export default function App() {
+export default function FootprintPage() {
   const photos = initialPhotos;
   const showDebugUi = import.meta.env.DEV;
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -242,102 +224,4 @@ export default function App() {
       )}
     </main>
   );
-}
-
-function PhotoPopover({ photo, placement, state, style, onAnimationEnd }: PhotoPopoverProps) {
-  return (
-    <aside
-      className={`photo-popover is-${placement} is-${state}`}
-      style={style}
-      aria-label="当前照片"
-      onAnimationEnd={onAnimationEnd}
-    >
-      <div className="photo-frame">
-        <img src={photo.imageUrl} alt={photo.fileName} />
-      </div>
-      <div className="photo-meta">
-        <strong>{photo.fileName}</strong>
-        <span>{formatDateTime(photo.takenAt)}</span>
-        <dl className="photo-details" aria-label="照片信息">
-          <div>
-            <dt>格式</dt>
-            <dd>{formatFileType(photo.fileType)}</dd>
-          </div>
-          <div>
-            <dt>坐标</dt>
-            <dd>{formatCoordinatePair(photo)}</dd>
-          </div>
-        </dl>
-      </div>
-    </aside>
-  );
-}
-
-function getAnchoredPhotoStyle(anchor: PhotoAnchor | null): PhotoPreviewStyle | undefined {
-  if (!anchor || typeof window === 'undefined') return undefined;
-  if (!Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return undefined;
-
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  const isCompact = viewportWidth <= 760;
-  const margin = isCompact ? 12 : 24;
-  const gap = isCompact ? 11 : 14;
-  const width = isCompact ? Math.min(148, Math.max(124, viewportWidth - 64)) : Math.min(184, viewportWidth - 48);
-  const height = width * (16 / 9) + (isCompact ? 92 : 88);
-  const maxLeft = Math.max(margin, viewportWidth - width - margin);
-  const maxTop = Math.max(margin, viewportHeight - height - margin);
-  const boundedAnchor = {
-    x: clamp(anchor.x, margin, viewportWidth - margin),
-    y: clamp(anchor.y, margin, viewportHeight - margin),
-  };
-  const placement: PhotoPopoverPlacement =
-    boundedAnchor.x + gap + width > viewportWidth - margin ? 'left' : 'right';
-  let left = boundedAnchor.x + gap;
-
-  if (placement === 'left') {
-    left = boundedAnchor.x - width - gap;
-  }
-
-  const top = clamp(boundedAnchor.y - height / 2, margin, maxTop);
-
-  return {
-    bottom: 'auto',
-    left: `${clamp(left, margin, maxLeft)}px`,
-    top: `${top}px`,
-    width: `${width}px`,
-    '--popover-placement': placement,
-  };
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function formatFileType(fileType: string): string {
-  const [, subtype] = fileType.split('/');
-
-  if (!subtype) return fileType.toUpperCase();
-  if (subtype === 'jpeg') return 'JPEG';
-
-  return subtype.toUpperCase();
-}
-
-function formatCoordinatePair(photo: PhotoPoint): string {
-  return `${formatCoordinate(photo.lat, 'N', 'S')} ${formatCoordinate(photo.lng, 'E', 'W')}`;
-}
-
-function formatCoordinate(value: number, positiveDirection: string, negativeDirection: string): string {
-  const direction = value >= 0 ? positiveDirection : negativeDirection;
-
-  return `${direction} ${Math.abs(value).toFixed(4)}`;
-}
-
-function preloadUpcomingPhotos(photos: PhotoPoint[], currentIndex: number, lookaheadCount: number) {
-  if (typeof window === 'undefined') return;
-
-  photos.slice(currentIndex + 1, currentIndex + 1 + lookaheadCount).forEach((photo) => {
-    const image = new Image();
-    image.decoding = 'async';
-    image.src = photo.imageUrl;
-  });
 }

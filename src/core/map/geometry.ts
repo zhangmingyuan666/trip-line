@@ -1,5 +1,5 @@
 import * as turf from '@turf/turf';
-import type { PhotoPoint, PlaybackSpeed } from './types';
+import type { PhotoPoint, PlaybackSpeed } from '../photo/types';
 
 export type LngLat = [number, number];
 

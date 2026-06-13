@@ -1,5 +1,5 @@
 import { Map as MapLibreMap } from 'maplibre-gl';
-import { interpolateNumber } from './mapUtils';
+import { interpolateNumber } from '../../core/map/geometry';
 
 export type ScreenAnchor = {
   x: number;

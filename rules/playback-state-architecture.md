@@ -77,11 +77,16 @@ Renderers must not directly own playback lifecycle. They may report explicit com
 
 ## Module Ownership
 
-- `playbackState.ts` owns phase/state/context types and pure selectors.
-- `useFootprintPlaybackRuntime.ts` owns playback timers, animation cancellation, and mutable playback state refs.
-- `footprintStepAnimation.ts` owns per-frame step-to-step map motion, active route growth, moving point updates, and camera interpolation.
-- `useInitialCameraGate.ts` owns initial camera started/completed/waiter/fallback state.
-- `FootprintMap.tsx` should remain an orchestration component: create the map, wire effects, call renderer/runtime helpers, and publish anchors. Do not add new timer refs, RAF loops, or phase-state refs directly to this component.
+- `pages/` owns route-level business composition and app/page state orchestration.
+- `components/` owns reusable UI components and component-local presentation helpers.
+- `enums/` owns finite UI/domain option sets and labels such as map themes and playback speed.
+- `core/photo/` owns photo domain models, formatting, and preloading helpers.
+- `core/map/` owns map geometry and map style construction.
+- `core/playback/state/` owns phase/state/context types and state factories.
+- `core/playback/selectors/` owns derived playback context and transition-neighborhood selectors.
+- `core/playback/runtime/` owns playback timers, animation cancellation, mutable playback state refs, and initial camera gate state.
+- `core/playback/animation/` owns per-frame step-to-step map motion, active route growth, moving point updates, and camera interpolation.
+- `components/footprint-map/FootprintMap.tsx` should remain an orchestration component: create the map, wire effects, call renderer/runtime helpers, and publish anchors. Do not add new timer refs, RAF loops, or phase-state refs directly to this component.
 
 ## Communication Rules
 

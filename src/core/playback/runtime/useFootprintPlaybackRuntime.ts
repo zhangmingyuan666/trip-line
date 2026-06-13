@@ -1,16 +1,8 @@
 import { useCallback, useRef } from 'react';
-import { holdDurationForSpeed } from './mapUtils';
-import {
-  buildPlaybackContext,
-  createHoldingPlaybackState,
-  type PlaybackContext,
-  type PlaybackState,
-} from './playbackState';
-import type { PlaybackSpeed } from './types';
-
-export const initialStepSettleDuration = 450;
-export const initialPopoverSettleDuration = 1000;
-export const nextStepPreviewDelay = 100;
+import { holdDurationForSpeed } from '../../map/geometry';
+import { buildPlaybackContext, createHoldingPlaybackState, type PlaybackContext, type PlaybackState } from '..';
+import type { PlaybackSpeed } from '../../photo/types';
+import { initialPopoverSettleDuration, initialStepSettleDuration, nextStepPreviewDelay } from '../timing';
 
 export function useFootprintPlaybackRuntime(currentIndex: number, stepCount: number) {
   const playbackStateRef = useRef<PlaybackState>(createHoldingPlaybackState(currentIndex));

@@ -1,14 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { CalendarDays, Gauge, Layers, MapPin, Pause, Play, RotateCcw } from 'lucide-react';
-import { mapThemeLabels } from '../mapStyles';
-import { formatDate, formatDateTime } from '../photoFormat';
-import type { MapTheme, PhotoPoint, PlaybackSpeed } from '../types';
-
-const speedLabels: Record<PlaybackSpeed, string> = {
-  slow: '慢',
-  normal: '正常',
-  fast: '快',
-};
+import { mapThemeLabels, mapThemes } from '../../enums/mapTheme';
+import { playbackSpeedLabels, playbackSpeeds } from '../../enums/playbackSpeed';
+import { formatDate, formatDateTime } from '../../core/photo/format';
+import type { MapTheme, PhotoPoint, PlaybackSpeed } from '../../core/photo/types';
 
 type DebugControlPanelProps = {
   photos: PhotoPoint[];
@@ -78,21 +73,21 @@ export function DebugControlPanel({
 
       <div className="speed-row" aria-label="播放速度">
         <Gauge size={17} />
-        {(['slow', 'normal', 'fast'] as PlaybackSpeed[]).map((value) => (
+        {playbackSpeeds.map((value) => (
           <button
             className={speed === value ? 'speed-option is-active' : 'speed-option'}
             key={value}
             type="button"
             onClick={() => onSetSpeed(value)}
           >
-            {speedLabels[value]}
+            {playbackSpeedLabels[value]}
           </button>
         ))}
       </div>
 
       <div className="theme-row" aria-label="地图样式">
         <Layers size={17} />
-        {(['clean', 'travel', 'dark', 'standard'] as MapTheme[]).map((value) => (
+        {mapThemes.map((value) => (
           <button
             className={mapTheme === value ? 'theme-option is-active' : 'theme-option'}
             key={value}

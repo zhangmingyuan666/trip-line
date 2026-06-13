@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
-import { stabilizeProjectedAnchor, type ScreenAnchor } from './footprintMapAnchor';
-import { addFootprintLayers, addFootprintSources } from './footprintMapLayers';
-import { setHoldingVisualState, setMovingVisualState, syncMapData } from './footprintMapVisualState';
-import { startStepTransitionAnimation } from './footprintStepAnimation';
-import { buildMapStyle } from './mapStyles';
+import { buildMapStyle } from '../../core/map/styles';
+import { toLngLat } from '../../core/map/geometry';
+import { startStepTransitionAnimation } from '../../core/playback/animation/stepTransitionAnimation';
 import {
   createDonePlaybackState,
   createHoldingPlaybackState,
@@ -16,12 +14,14 @@ import {
   withActivePopoverIndex,
   withTransitionProgress,
   type StepTransition,
-} from './playbackState';
-import type { MapTheme, PhotoPoint, PlaybackSpeed } from './types';
-import { toLngLat } from './mapUtils';
-import { useFootprintPlaybackRuntime } from './useFootprintPlaybackRuntime';
-import { useInitialCameraGate } from './useInitialCameraGate';
-import { useLatestRef } from './useLatestRef';
+} from '../../core/playback';
+import { useFootprintPlaybackRuntime } from '../../core/playback/runtime/useFootprintPlaybackRuntime';
+import { useInitialCameraGate } from '../../core/playback/runtime/useInitialCameraGate';
+import type { MapTheme, PhotoPoint, PlaybackSpeed } from '../../core/photo/types';
+import { useLatestRef } from '../../hooks/useLatestRef';
+import { stabilizeProjectedAnchor, type ScreenAnchor } from './anchor';
+import { addFootprintLayers, addFootprintSources } from './layers';
+import { setHoldingVisualState, setMovingVisualState, syncMapData } from './visualState';
 
 type FootprintMapProps = {
   photos: PhotoPoint[];

@@ -1,12 +1,5 @@
 import type { StyleSpecification } from 'maplibre-gl';
-import type { MapTheme } from './types';
-
-export const mapThemeLabels: Record<MapTheme, string> = {
-  clean: '清爽',
-  travel: '旅行',
-  dark: '深色',
-  standard: '标准',
-};
+import type { MapTheme } from '../../enums/mapTheme';
 
 const tileAttribution =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
@@ -37,10 +30,6 @@ export function buildMapStyle(theme: MapTheme): StyleSpecification {
       },
     ],
   };
-}
-
-export function isDarkMapTheme(theme: MapTheme): boolean {
-  return theme === 'dark';
 }
 
 function getThemeConfig(theme: MapTheme) {

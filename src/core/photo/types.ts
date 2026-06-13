@@ -1,3 +1,6 @@
+import type { MapTheme } from '../../enums/mapTheme';
+import type { PlaybackSpeed } from '../../enums/playbackSpeed';
+
 export type PhotoPoint = {
   id: string;
   fileName: string;
@@ -17,6 +20,4 @@ export type ImportSummary = {
   failed: number;
 };
 
-export type PlaybackSpeed = 'slow' | 'normal' | 'fast';
-
-export type MapTheme = 'clean' | 'travel' | 'dark' | 'standard';
+export type { MapTheme, PlaybackSpeed };

@@ -7,9 +7,9 @@ import {
   routeSegmentCoordinates,
   toLngLat,
   type LngLat,
-} from './mapUtils';
-import type { MapTheme, PhotoPoint } from './types';
-import { emptyLine, emptyPoints, setFootprintLayerMode, setSourceData } from './footprintMapLayers';
+} from '../../core/map/geometry';
+import type { MapTheme, PhotoPoint } from '../../core/photo/types';
+import { emptyLine, emptyPoints, setFootprintLayerMode, setSourceData } from './layers';
 
 export function syncMapData(
   map: MapLibreMap,

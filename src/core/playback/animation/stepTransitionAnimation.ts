@@ -1,5 +1,5 @@
 import { Map as MapLibreMap } from 'maplibre-gl';
-import { emptyLine, setSourceData } from './footprintMapLayers';
+import { emptyLine, setSourceData } from '../../../components/footprint-map/layers';
 import {
   appleEaseInOut,
   bearing,
@@ -15,9 +15,9 @@ import {
   routeSegmentCoordinatesWithProgress,
   segmentProgress,
   zoomForDistance,
-} from './mapUtils';
-import type { StepTransition } from './playbackState';
-import type { PhotoPoint, PlaybackSpeed } from './types';
+} from '../../map/geometry';
+import type { StepTransition } from '../state/types';
+import type { PhotoPoint, PlaybackSpeed } from '../../photo/types';
 
 type StepTransitionAnimationOptions = {
   map: MapLibreMap;

@@ -1,7 +1,7 @@
 import { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
-import { isDarkMapTheme } from './mapStyles';
-import { pointsFeatureCollection, routeFeature } from './mapUtils';
-import type { MapTheme } from './types';
+import { isDarkMapTheme } from '../../enums/mapTheme';
+import { pointsFeatureCollection, routeFeature } from '../../core/map/geometry';
+import type { MapTheme } from '../../core/photo/types';
 
 export const emptyLine = routeFeature([]);
 export const emptyPoints = pointsFeatureCollection([]);
