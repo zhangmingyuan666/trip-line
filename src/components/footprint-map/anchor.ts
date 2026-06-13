@@ -6,6 +6,8 @@ export type ScreenAnchor = {
   y: number;
 };
 
+export type AnchorPlacement = 'left' | 'right';
+
 export function stabilizeProjectedAnchor(
   point: ScreenAnchor,
   map: MapLibreMap,
@@ -66,4 +68,21 @@ function projectPointToViewportEdge(point: ScreenAnchor, width: number, height: 
     x: Math.min(maxX, Math.max(minX, centerX + deltaX * scale)),
     y: Math.min(maxY, Math.max(minY, centerY + deltaY * scale)),
   };
+}
+
+export function getIncomingRoutePopoverPlacement(
+  map: MapLibreMap,
+  coordinates: Array<[number, number]>,
+  targetIndex: number,
+): AnchorPlacement | undefined {
+  const targetCoordinate = coordinates[targetIndex];
+  const routeCoordinate = coordinates[targetIndex - 1] ?? coordinates[targetIndex + 1];
+  if (!targetCoordinate || !routeCoordinate) return undefined;
+
+  const targetPoint = map.project(targetCoordinate);
+  const routePoint = map.project(routeCoordinate);
+  const horizontalDelta = targetPoint.x - routePoint.x;
+  if (Math.abs(horizontalDelta) < 8) return undefined;
+
+  return horizontalDelta > 0 ? 'right' : 'left';
 }

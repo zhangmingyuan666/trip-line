@@ -76,9 +76,14 @@ export default function FootprintPage() {
       const nextAnchor = {
         x: Math.round(anchor.x),
         y: Math.round(anchor.y),
+        preferredPlacement: anchor.preferredPlacement,
       };
 
-      if (previousAnchor?.x === nextAnchor.x && previousAnchor.y === nextAnchor.y) {
+      if (
+        previousAnchor?.x === nextAnchor.x &&
+        previousAnchor.y === nextAnchor.y &&
+        previousAnchor.preferredPlacement === nextAnchor.preferredPlacement
+      ) {
         return previousAnchor;
       }
 

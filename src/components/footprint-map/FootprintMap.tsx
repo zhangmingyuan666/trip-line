@@ -19,7 +19,12 @@ import { useFootprintPlaybackRuntime } from '../../core/playback/runtime/useFoot
 import { useInitialCameraGate } from '../../core/playback/runtime/useInitialCameraGate';
 import type { MapTheme, PhotoPoint, PlaybackSpeed } from '../../core/photo/types';
 import { useLatestRef } from '../../hooks/useLatestRef';
-import { stabilizeProjectedAnchor, type ScreenAnchor } from './anchor';
+import {
+  getIncomingRoutePopoverPlacement,
+  stabilizeProjectedAnchor,
+  type AnchorPlacement,
+  type ScreenAnchor,
+} from './anchor';
 import { addFootprintLayers, addFootprintSources } from './layers';
 import { setHoldingVisualState, setMovingVisualState, syncMapData } from './visualState';
 
@@ -29,7 +34,7 @@ type FootprintMapProps = {
   isPlaying: boolean;
   speed: PlaybackSpeed;
   mapTheme: MapTheme;
-  onAnchorChange: (anchor: { x: number; y: number } | null) => void;
+  onAnchorChange: (anchor: { x: number; y: number; preferredPlacement?: AnchorPlacement } | null) => void;
   onIndexChange: (index: number) => void;
   onPreviewIndexChange: (index: number) => void;
   onDone: () => void;
@@ -53,6 +58,10 @@ export default function FootprintMap({
   const hasRevealedInitialStepRef = useRef(false);
   const lastPublishedAnchorRef = useRef<ScreenAnchor | null>(null);
   const lastPublishedAnchorIndexRef = useRef<number | null>(currentIndex);
+  const lastPublishedAnchorPlacementRef = useRef<{
+    index: number;
+    placement: AnchorPlacement | undefined;
+  } | null>(null);
   const initialCameraGate = useInitialCameraGate();
   const playbackRuntime = useFootprintPlaybackRuntime(currentIndex, photos.length);
   const indexRef = useLatestRef(currentIndex);
@@ -117,6 +126,7 @@ export default function FootprintMap({
 
     mapThemeRef.current = mapTheme;
     stopPlaybackSideEffects();
+    lastPublishedAnchorPlacementRef.current = null;
 
     map.setStyle(buildMapStyle(mapTheme));
     map.once('idle', () => {
@@ -132,6 +142,8 @@ export default function FootprintMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
+    lastPublishedAnchorPlacementRef.current = null;
 
     const run = () => syncMapData(map, photos, currentIndex, true, mapTheme);
     if (map.isStyleLoaded()) {
@@ -332,10 +344,11 @@ export default function FootprintMap({
     if (lastPublishedAnchorIndexRef.current !== index) {
       lastPublishedAnchorRef.current = null;
       lastPublishedAnchorIndexRef.current = index;
+      lastPublishedAnchorPlacementRef.current = null;
     }
 
     const coordinate = coordinates[index];
-    publishAnchor(coordinate);
+    publishAnchor(coordinate, index);
   }
 
   function shouldDeferInitialAnchor(index: number) {
@@ -349,18 +362,37 @@ export default function FootprintMap({
     publishAnchorForIndex(activeIndex);
   }
 
-  function publishAnchor(coordinate: [number, number] | undefined) {
+  function publishAnchor(coordinate: [number, number] | undefined, index: number | null = null) {
     const map = mapRef.current;
     if (!map || !coordinate) {
       lastPublishedAnchorRef.current = null;
+      lastPublishedAnchorPlacementRef.current = null;
       onAnchorChangeRef.current(null);
       return;
     }
 
     const point = map.project(coordinate);
     const stableAnchor = stabilizeProjectedAnchor({ x: point.x, y: point.y }, map, lastPublishedAnchorRef.current);
+    const preferredPlacement = getStablePopoverPlacement(index);
     lastPublishedAnchorRef.current = stableAnchor;
-    onAnchorChangeRef.current(stableAnchor);
+    onAnchorChangeRef.current({
+      ...stableAnchor,
+      preferredPlacement,
+    });
+  }
+
+  function getStablePopoverPlacement(index: number | null): AnchorPlacement | undefined {
+    const map = mapRef.current;
+    if (!map || index === null) return undefined;
+
+    if (lastPublishedAnchorPlacementRef.current?.index === index) {
+      return lastPublishedAnchorPlacementRef.current.placement;
+    }
+
+    const placement = getIncomingRoutePopoverPlacement(map, coordinates, index);
+    lastPublishedAnchorPlacementRef.current = { index, placement };
+
+    return placement;
   }
 
   return <div ref={containerRef} className="map-canvas" aria-label="照片足迹地图" />;

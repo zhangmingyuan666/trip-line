@@ -4,6 +4,7 @@ import type { PhotoPoint } from '../../core/photo/types';
 export type PhotoAnchor = {
   x: number;
   y: number;
+  preferredPlacement?: PhotoPopoverPlacement;
 };
 
 export type PhotoPopoverPlacement = 'left' | 'right';
