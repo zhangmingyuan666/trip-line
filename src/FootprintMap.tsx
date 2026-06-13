@@ -9,6 +9,20 @@ import {
 } from './footprintMapLayers';
 import { setHoldingVisualState, setMovingVisualState, syncMapData } from './footprintMapVisualState';
 import { buildMapStyle } from './mapStyles';
+import {
+  buildPlaybackContext,
+  createDonePlaybackState,
+  createHoldingPlaybackState,
+  createInitialCameraPlaybackState,
+  createInitialRevealPlaybackState,
+  createPausedPlaybackState,
+  createTransitionPlaybackState,
+  getNextStepTransition,
+  withActivePopoverIndex,
+  withTransitionProgress,
+  type PlaybackState,
+  type StepTransition,
+} from './playbackState';
 import type { MapTheme, PhotoPoint, PlaybackSpeed } from './types';
 import {
   appleEaseInOut,
@@ -64,7 +78,7 @@ export default function FootprintMap({
   const initialCameraTimeoutRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const nextPopoverTimeoutRef = useRef<number | null>(null);
-  const activePopoverIndexRef = useRef<number | null>(currentIndex);
+  const playbackStateRef = useRef<PlaybackState>(createHoldingPlaybackState(currentIndex));
   const hasStartedInitialCameraRef = useRef(false);
   const hasCompletedInitialCameraRef = useRef(false);
   const initialCameraWaitersRef = useRef<Array<() => void>>([]);
@@ -137,13 +151,13 @@ export default function FootprintMap({
       addFootprintLayers(map, mapTheme);
       map.once('moveend', completeInitialCamera);
       hasStartedInitialCameraRef.current = true;
+      setPlaybackState(createInitialCameraPlaybackState(currentIndex));
       const initialCameraDuration = syncMapData(map, photos, currentIndex, true, mapTheme);
       if (initialCameraDuration === 0) {
         completeInitialCamera();
       } else {
         initialCameraTimeoutRef.current = window.setTimeout(completeInitialCamera, initialCameraDuration + 600);
       }
-      activePopoverIndexRef.current = currentIndex;
     });
 
     mapRef.current = map;
@@ -167,7 +181,7 @@ export default function FootprintMap({
       addFootprintSources(map);
       addFootprintLayers(map, mapTheme);
       syncMapData(map, photos, currentIndex, true, mapTheme);
-      activePopoverIndexRef.current = currentIndex;
+      setPlaybackState(createHoldingPlaybackState(currentIndex));
       publishAnchorForIndex(currentIndex);
       map.once('moveend', () => publishAnchorForIndex(currentIndex));
     });
@@ -180,13 +194,17 @@ export default function FootprintMap({
     const run = () => syncMapData(map, photos, currentIndex, true, mapTheme);
     if (map.isStyleLoaded()) {
       run();
-      activePopoverIndexRef.current = currentIndex;
+      if (!playingRef.current) {
+        setPlaybackState(createHoldingPlaybackState(currentIndex));
+      }
       publishAnchorForIndex(currentIndex);
       map.once('moveend', () => publishAnchorForIndex(currentIndex));
     } else {
       map.once('load', () => {
         run();
-        activePopoverIndexRef.current = currentIndex;
+        if (!playingRef.current) {
+          setPlaybackState(createHoldingPlaybackState(currentIndex));
+        }
         publishAnchorForIndex(currentIndex);
         map.once('moveend', () => publishAnchorForIndex(currentIndex));
       });
@@ -201,12 +219,12 @@ export default function FootprintMap({
     const run = () => syncMapData(map, photos, currentIndex, false, mapTheme);
     if (map.isStyleLoaded()) {
       run();
-      activePopoverIndexRef.current = currentIndex;
+      setPlaybackState(createPausedPlaybackState(currentIndex));
       publishAnchorForIndex(currentIndex);
     } else {
       map.once('load', () => {
         run();
-        activePopoverIndexRef.current = currentIndex;
+        setPlaybackState(createPausedPlaybackState(currentIndex));
         publishAnchorForIndex(currentIndex);
       });
     }
@@ -223,12 +241,14 @@ export default function FootprintMap({
       if (!canContinuePlayback()) return;
       const fromIndex = indexRef.current;
 
-      if (fromIndex >= photos.length - 1) {
+      const transition = getNextStepTransition(fromIndex, photos.length);
+      if (!transition) {
+        setPlaybackState(createDonePlaybackState(fromIndex));
         onDoneRef.current();
         return;
       }
 
-      const nextIndex = fromIndex + 1;
+      const nextIndex = transition.toIndex;
       let didShowNextPopover = false;
 
       const showNextPopover = () => {
@@ -238,13 +258,13 @@ export default function FootprintMap({
         previewStep(nextIndex);
       };
 
-      activePopoverIndexRef.current = null;
+      setPlaybackState(createTransitionPlaybackState('leaving', transition, 0));
       lastPublishedAnchorRef.current = null;
       onAnchorChangeRef.current(null);
-      showMovingVisualState(fromIndex);
+      showMovingVisualState(transition);
       scheduleNextStepPreview(showNextPopover);
 
-      animateSegment(fromIndex, () => {
+      animateSegment(transition, () => {
         if (cancelled) return;
 
         showNextPopover();
@@ -253,6 +273,7 @@ export default function FootprintMap({
           if (cancelled) return;
 
           if (nextIndex >= photos.length - 1) {
+            setPlaybackState(createDonePlaybackState(nextIndex));
             onDoneRef.current();
             return;
           }
@@ -275,14 +296,14 @@ export default function FootprintMap({
       hasRevealedInitialStepRef.current = true;
     }
 
+    setPlaybackState(createHoldingPlaybackState(index));
     indexRef.current = index;
-    activePopoverIndexRef.current = index;
     onIndexChangeRef.current(index);
     publishAnchorForIndex(index);
   }
 
   function previewStep(index: number) {
-    activePopoverIndexRef.current = index;
+    setPlaybackState(withActivePopoverIndex(playbackStateRef.current, index));
     onPreviewIndexChangeRef.current(index);
     publishAnchorForIndex(index);
   }
@@ -298,6 +319,7 @@ export default function FootprintMap({
     const startAfterInitialCameraSettles = (shouldRevealInitialStep: boolean) => {
       if (!canContinuePlayback()) return;
 
+      setPlaybackState(createInitialRevealPlaybackState(indexRef.current));
       initialPlaybackTimeoutRef.current = window.setTimeout(() => {
         if (shouldRevealInitialStep) {
           publishStep(0);
@@ -387,10 +409,10 @@ export default function FootprintMap({
     }
   }
 
-  function animateSegment(fromIndex: number, onComplete: () => void) {
+  function animateSegment(transition: StepTransition, onComplete: () => void) {
     const map = mapRef.current;
-    const from = photos[fromIndex];
-    const to = photos[fromIndex + 1];
+    const from = photos[transition.fromIndex];
+    const to = photos[transition.toIndex];
     if (!map || !from || !to) return;
 
     const distance = distanceKm(from, to);
@@ -416,6 +438,7 @@ export default function FootprintMap({
       if (!playingRef.current) return;
 
       const rawProgress = Math.min(1, (time - startTime) / duration);
+      setPlaybackState(withTransitionProgress(playbackStateRef.current, 'moving', rawProgress));
       const cameraProgress = appleEaseInOut(segmentProgress(rawProgress, 0, cameraLeadEnd));
       const movementProgress = appleEaseInOut(segmentProgress(rawProgress, movementStart, 1));
       const currentCoord = interpolateGreatCircle(from, to, movementProgress);
@@ -436,8 +459,9 @@ export default function FootprintMap({
         frameRef.current = requestAnimationFrame(step);
       } else {
         frameRef.current = null;
-        showHoldingVisualState(fromIndex + 1);
-        publishStep(fromIndex + 1);
+        setPlaybackState(withTransitionProgress(playbackStateRef.current, 'arriving', 1));
+        showHoldingVisualState(transition.toIndex);
+        publishStep(transition.toIndex);
         onComplete();
       }
     };
@@ -452,11 +476,11 @@ export default function FootprintMap({
     setHoldingVisualState(map, photos, coordinates, index, mapThemeRef.current);
   }
 
-  function showMovingVisualState(fromIndex: number) {
+  function showMovingVisualState(transition: StepTransition) {
     const map = mapRef.current;
     if (!map) return;
 
-    setMovingVisualState(map, photos, coordinates, fromIndex, mapThemeRef.current);
+    setMovingVisualState(map, photos, coordinates, transition.fromIndex, mapThemeRef.current);
   }
 
   function publishAnchorForIndex(index: number) {
@@ -476,7 +500,7 @@ export default function FootprintMap({
   }
 
   function publishActivePopoverAnchor() {
-    const activeIndex = activePopoverIndexRef.current;
+    const activeIndex = getPlaybackContext().activePopoverIndex;
     if (activeIndex === null) return;
 
     publishAnchorForIndex(activeIndex);
@@ -494,6 +518,14 @@ export default function FootprintMap({
     const stableAnchor = stabilizeProjectedAnchor({ x: point.x, y: point.y }, map, lastPublishedAnchorRef.current);
     lastPublishedAnchorRef.current = stableAnchor;
     onAnchorChangeRef.current(stableAnchor);
+  }
+
+  function setPlaybackState(state: PlaybackState) {
+    playbackStateRef.current = state;
+  }
+
+  function getPlaybackContext() {
+    return buildPlaybackContext(playbackStateRef.current, photos.length);
   }
 
   return <div ref={containerRef} className="map-canvas" aria-label="照片足迹地图" />;
