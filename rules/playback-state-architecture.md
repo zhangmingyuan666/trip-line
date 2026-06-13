@@ -75,6 +75,14 @@ Map rendering, popover presentation, camera motion, and preload behavior are con
 
 Renderers must not directly own playback lifecycle. They may report explicit completion events such as `MOVE_DONE`, `HOLD_DONE`, or `INITIAL_CAMERA_DONE`.
 
+## Module Ownership
+
+- `playbackState.ts` owns phase/state/context types and pure selectors.
+- `useFootprintPlaybackRuntime.ts` owns playback timers, animation cancellation, and mutable playback state refs.
+- `footprintStepAnimation.ts` owns per-frame step-to-step map motion, active route growth, moving point updates, and camera interpolation.
+- `useInitialCameraGate.ts` owns initial camera started/completed/waiter/fallback state.
+- `FootprintMap.tsx` should remain an orchestration component: create the map, wire effects, call renderer/runtime helpers, and publish anchors. Do not add new timer refs, RAF loops, or phase-state refs directly to this component.
+
 ## Communication Rules
 
 Communication is one-way down and event-based up:
