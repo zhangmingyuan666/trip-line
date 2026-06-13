@@ -1,4 +1,4 @@
-import { Map as MapLibreMap } from 'maplibre-gl';
+import { LngLat, Map as MapLibreMap } from 'maplibre-gl';
 import { interpolateNumber } from '../../core/map/geometry';
 
 export type ScreenAnchor = {
@@ -7,6 +7,13 @@ export type ScreenAnchor = {
 };
 
 export type AnchorPlacement = 'left' | 'right';
+
+type ProjectionCamera = {
+  center: [number, number];
+  zoom: number;
+  bearing: number;
+  pitch: number;
+};
 
 export function stabilizeProjectedAnchor(
   point: ScreenAnchor,
@@ -74,15 +81,41 @@ export function getIncomingRoutePopoverPlacement(
   map: MapLibreMap,
   coordinates: Array<[number, number]>,
   targetIndex: number,
+  camera?: ProjectionCamera | null,
 ): AnchorPlacement | undefined {
   const targetCoordinate = coordinates[targetIndex];
   const routeCoordinate = coordinates[targetIndex - 1] ?? coordinates[targetIndex + 1];
   if (!targetCoordinate || !routeCoordinate) return undefined;
 
-  const targetPoint = map.project(targetCoordinate);
-  const routePoint = map.project(routeCoordinate);
+  return getRoutePopoverPlacement(map, targetCoordinate, routeCoordinate, camera);
+}
+
+export function getRoutePopoverPlacement(
+  map: MapLibreMap,
+  targetCoordinate: [number, number],
+  routeCoordinate: [number, number],
+  camera?: ProjectionCamera | null,
+): AnchorPlacement | undefined {
+  const targetPoint = projectCoordinate(map, targetCoordinate, camera);
+  const routePoint = projectCoordinate(map, routeCoordinate, camera);
   const horizontalDelta = targetPoint.x - routePoint.x;
   if (Math.abs(horizontalDelta) < 8) return undefined;
 
   return horizontalDelta > 0 ? 'right' : 'left';
+}
+
+function projectCoordinate(
+  map: MapLibreMap,
+  coordinate: [number, number],
+  camera?: ProjectionCamera | null,
+): ScreenAnchor {
+  if (!camera) return map.project(coordinate);
+
+  const transform = map.transform.clone();
+  transform.center = LngLat.convert(camera.center);
+  transform.zoom = camera.zoom;
+  transform.bearing = camera.bearing;
+  transform.pitch = camera.pitch;
+
+  return transform.locationPoint(LngLat.convert(coordinate));
 }

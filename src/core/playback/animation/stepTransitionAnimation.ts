@@ -19,6 +19,13 @@ import {
 import type { StepTransition } from '../state/types';
 import type { PhotoPoint, PlaybackSpeed } from '../../photo/types';
 
+export type StepTransitionTargetCamera = {
+  center: [number, number];
+  zoom: number;
+  bearing: number;
+  pitch: number;
+};
+
 type StepTransitionAnimationOptions = {
   map: MapLibreMap;
   photos: PhotoPoint[];
@@ -47,18 +54,14 @@ export function startStepTransitionAnimation({
   const distance = distanceKm(from, to);
   const duration = durationForDistance(distance, speed);
   const segmentCoordinates = routeSegmentCoordinates(from, to);
-  const targetZoom = zoomForDistance(distance);
-  const reducedMotion = prefersReducedMotion();
-  const startBearing = map.getBearing();
-  const rawBearing = bearing(from, to);
-  const targetBearing =
-    reducedMotion || !Number.isFinite(rawBearing) ? startBearing : dampedBearing(startBearing, rawBearing, 0.18, 24);
-  const targetPitch = reducedMotion ? 0 : distance > 80 ? 28 : 34;
+  const targetCamera = getStepTransitionTargetCamera(map, photos, transition);
+  if (!targetCamera) return () => undefined;
+
   const cameraLeadEnd = distance > 80 ? 0.82 : 0.76;
   const movementStart = distance > 80 ? 0.08 : 0.04;
   const startCamera = {
     zoom: map.getZoom(),
-    bearing: startBearing,
+    bearing: map.getBearing(),
     pitch: map.getPitch(),
   };
   const startTime = performance.now();
@@ -81,9 +84,9 @@ export function startStepTransitionAnimation({
 
     map.jumpTo({
       center: currentCoord,
-      zoom: interpolateNumber(startCamera.zoom, targetZoom, cameraProgress),
-      bearing: interpolateBearing(startCamera.bearing, targetBearing, cameraProgress),
-      pitch: interpolateNumber(startCamera.pitch, targetPitch, cameraProgress),
+      zoom: interpolateNumber(startCamera.zoom, targetCamera.zoom, cameraProgress),
+      bearing: interpolateBearing(startCamera.bearing, targetCamera.bearing, cameraProgress),
+      pitch: interpolateNumber(startCamera.pitch, targetCamera.pitch, cameraProgress),
     });
     onPublishAnchor();
 
@@ -104,6 +107,30 @@ export function startStepTransitionAnimation({
       cancelAnimationFrame(frameId);
       frameId = null;
     }
+  };
+}
+
+export function getStepTransitionTargetCamera(
+  map: MapLibreMap,
+  photos: PhotoPoint[],
+  transition: StepTransition,
+): StepTransitionTargetCamera | null {
+  const from = photos[transition.fromIndex];
+  const to = photos[transition.toIndex];
+  if (!from || !to) return null;
+
+  const distance = distanceKm(from, to);
+  const reducedMotion = prefersReducedMotion();
+  const startBearing = map.getBearing();
+  const rawBearing = bearing(from, to);
+  const targetBearing =
+    reducedMotion || !Number.isFinite(rawBearing) ? startBearing : dampedBearing(startBearing, rawBearing, 0.18, 24);
+
+  return {
+    center: [to.lng, to.lat],
+    zoom: zoomForDistance(distance),
+    bearing: targetBearing,
+    pitch: reducedMotion ? 0 : distance > 80 ? 28 : 34,
   };
 }
 

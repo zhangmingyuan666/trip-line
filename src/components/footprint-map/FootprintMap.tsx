@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
 import { buildMapStyle } from '../../core/map/styles';
-import { toLngLat } from '../../core/map/geometry';
-import { startStepTransitionAnimation } from '../../core/playback/animation/stepTransitionAnimation';
+import { routeSegmentCoordinates, toLngLat } from '../../core/map/geometry';
+import {
+  getStepTransitionTargetCamera,
+  startStepTransitionAnimation,
+} from '../../core/playback/animation/stepTransitionAnimation';
 import {
   createDonePlaybackState,
   createHoldingPlaybackState,
@@ -21,6 +24,7 @@ import type { MapTheme, PhotoPoint, PlaybackSpeed } from '../../core/photo/types
 import { useLatestRef } from '../../hooks/useLatestRef';
 import {
   getIncomingRoutePopoverPlacement,
+  getRoutePopoverPlacement,
   stabilizeProjectedAnchor,
   type AnchorPlacement,
   type ScreenAnchor,
@@ -216,6 +220,7 @@ export default function FootprintMap({
       lastPublishedAnchorRef.current = null;
       onAnchorChangeRef.current(null);
       showMovingVisualState(transition);
+      lockTransitionTargetPopoverPlacement(transition);
       playbackRuntime.scheduleNextStepPreview(showNextPopover);
 
       startTransitionAnimation(transition, () => {
@@ -344,7 +349,9 @@ export default function FootprintMap({
     if (lastPublishedAnchorIndexRef.current !== index) {
       lastPublishedAnchorRef.current = null;
       lastPublishedAnchorIndexRef.current = index;
-      lastPublishedAnchorPlacementRef.current = null;
+      if (lastPublishedAnchorPlacementRef.current?.index !== index) {
+        lastPublishedAnchorPlacementRef.current = null;
+      }
     }
 
     const coordinate = coordinates[index];
@@ -393,6 +400,34 @@ export default function FootprintMap({
     lastPublishedAnchorPlacementRef.current = { index, placement };
 
     return placement;
+  }
+
+  function lockTransitionTargetPopoverPlacement(transition: StepTransition) {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const targetCamera = getStepTransitionTargetCamera(map, photos, transition);
+    const targetCoordinate = coordinates[transition.toIndex];
+    const routeCoordinate = getTransitionIncomingRouteCoordinate(transition);
+    const placement =
+      targetCoordinate && routeCoordinate
+        ? getRoutePopoverPlacement(map, targetCoordinate, routeCoordinate, targetCamera)
+        : getIncomingRoutePopoverPlacement(map, coordinates, transition.toIndex, targetCamera);
+
+    lastPublishedAnchorPlacementRef.current = {
+      index: transition.toIndex,
+      placement,
+    };
+  }
+
+  function getTransitionIncomingRouteCoordinate(transition: StepTransition): [number, number] | undefined {
+    const from = photos[transition.fromIndex];
+    const to = photos[transition.toIndex];
+    if (!from || !to) return coordinates[transition.fromIndex];
+
+    const segmentCoordinates = routeSegmentCoordinates(from, to);
+
+    return segmentCoordinates[segmentCoordinates.length - 2] ?? coordinates[transition.fromIndex];
   }
 
   return <div ref={containerRef} className="map-canvas" aria-label="照片足迹地图" />;
